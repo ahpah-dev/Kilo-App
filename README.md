@@ -13,6 +13,11 @@ WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts in
 
 ## Features
 
+- **Command palette** — `Ctrl K` jumps to any chat, theme, model, setting or action.
+- **Full-text search** — `Ctrl + Shift + F` searches every message, with matches
+  highlighted in context.
+- **Conversation tools** — pin, archive, duplicate, export as Markdown or JSON, import,
+  and edit-and-resend an earlier message.
 - **Three modes** — **Agent** (works in your folder), **Plan** (proposes an approach
   and a task list, changing nothing) and **Chat** (conversation only, no tools).
 - **A visible task list** — before multi-step work the agent records what it is going
@@ -23,8 +28,9 @@ WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts in
   limit.
 - **Agentic coding in your workspace** — open a folder and Kilo explores it with real
   tools instead of guessing at file contents.
-- **Seven filesystem tools** — `list_directory`, `read_file`, `search_files`, `write_file`,
-  `edit_file`, `delete_path` and `run_command`, plus `update_todos` and `plan`.
+- **Nine agent tools** — `list_directory`, `read_file`, `search_files`, `write_file`,
+  `edit_file`, `delete_path` and `run_command` for the workspace, plus `update_todos`
+  and `plan` for keeping the work on track.
 - **Approval before anything destructive** — reads run freely; writes and commands ask
   first. Auto-approve can be enabled per category in Settings.
 - **Streaming responses** — tokens, visible reasoning and live tool-call cards as they
