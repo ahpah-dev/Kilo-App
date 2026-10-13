@@ -155,6 +155,9 @@ pub fn set_workspace(config: State<'_, Arc<ConfigStore>>, path: Option<String>) 
 
 /// Execute an agent tool inside the current workspace. Tool failures are
 /// returned as `ok: false` so the model can see and recover from them.
+///
+/// A few tools need no workspace (`update_todos`, `plan`) — they read and write
+/// nothing on disk, so they stay available even with no folder open.
 #[command]
 pub async fn execute_tool(
     config: State<'_, Arc<ConfigStore>>,
@@ -162,6 +165,29 @@ pub async fn execute_tool(
     call_id: String,
     invocation: ToolInvocation,
 ) -> Result<ToolOutput, String> {
+    let args = match parse_arguments(&invocation.arguments) {
+        Ok(args) => args,
+        Err(e) => {
+            return Ok(ToolOutput { ok: false, output: e, changed_path: None });
+        }
+    };
+
+    if Workspace::is_workspace_free(&invocation.name) {
+        let token = operations.register(&call_id);
+        let output = match invocation.name.as_str() {
+            "update_todos" => Workspace::update_todos(&args),
+            "plan" => Workspace::plan(&args),
+            other => Err(format!("Unknown tool `{other}`")),
+        };
+        operations.finish(&call_id);
+        drop(token);
+        return Ok(output.unwrap_or_else(|e| ToolOutput {
+            ok: false,
+            output: e,
+            changed_path: None,
+        }));
+    }
+
     let Some(root) = config.get().workspace else {
         return Ok(ToolOutput {
             ok: false,
@@ -170,12 +196,6 @@ pub async fn execute_tool(
         });
     };
     let root = canonical_dir(&root)?;
-    let args = match parse_arguments(&invocation.arguments) {
-        Ok(args) => args,
-        Err(e) => {
-            return Ok(ToolOutput { ok: false, output: e, changed_path: None });
-        }
-    };
 
     let token = operations.register(&call_id);
     let output = Workspace::new(root).execute(&invocation.name, &args, token).await;

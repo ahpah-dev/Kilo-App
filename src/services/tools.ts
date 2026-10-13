@@ -1,6 +1,6 @@
 import type { Tool } from '@/types';
 
-export type ToolRisk = 'read' | 'write' | 'exec';
+export type ToolRisk = 'read' | 'write' | 'exec' | 'plan';
 
 export interface ToolMeta {
   label: string;
@@ -17,7 +17,15 @@ export const TOOL_META: Record<string, ToolMeta> = {
   edit_file: { label: 'Edit', risk: 'write', target: 'path' },
   delete_path: { label: 'Delete', risk: 'write', target: 'path' },
   run_command: { label: 'Run', risk: 'exec', target: 'command' },
+  update_todos: { label: 'Plan', risk: 'plan', target: 'todos' },
+  plan: { label: 'Plan', risk: 'plan', target: 'summary' },
 };
+
+/** Tools the agent may use while planning: nothing that reads or writes disk. */
+export const PLAN_MODE_TOOLS = ['update_todos', 'plan'] as const;
+
+export const TODO_TOOL = 'update_todos';
+export const PLAN_TOOL = 'plan';
 
 export const AGENT_TOOLS: Tool[] = [
   {
@@ -135,6 +143,76 @@ export const AGENT_TOOLS: Tool[] = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'update_todos',
+      description:
+        'Create or update your working task list. Send the FULL list every time (not a delta); items are matched by id, so an existing id updates in place and a new id is added. Keep titles short and specific. Mark exactly one item in_progress at a time and mark items done as soon as they are finished. Use this before starting multi-step work.',
+      parameters: {
+        type: 'object',
+        properties: {
+          todos: {
+            type: 'array',
+            description: 'The complete task list, in order.',
+            items: {
+              type: 'object',
+              properties: {
+                id: {
+                  type: 'string',
+                  description: 'Stable short id used to update this item later, e.g. "explore-auth". Reuse the same id when updating.',
+                },
+                title: { type: 'string', description: 'Short description of the task.' },
+                status: {
+                  type: 'string',
+                  enum: ['pending', 'in_progress', 'done'],
+                  description: 'Current state. Defaults to pending.',
+                },
+              },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['todos'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'plan',
+      description:
+        'Record a plan for the user to approve. Use this in planning mode instead of making changes: summarise what you found, list the changes you propose, and record the task list. Nothing on disk is touched.',
+      parameters: {
+        type: 'object',
+        properties: {
+          summary: {
+            type: 'string',
+            description: 'Two or three sentences: what you found and the approach you propose.',
+          },
+          changes: {
+            type: 'array',
+            description: 'The specific changes you would make, one short line each, naming files.',
+            items: { type: 'string' },
+          },
+          todos: {
+            type: 'array',
+            description: 'Optional task list for the work, same shape as update_todos.',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                title: { type: 'string' },
+                status: { type: 'string', enum: ['pending', 'in_progress', 'done'] },
+              },
+              required: ['title'],
+            },
+          },
+        },
+        required: ['summary'],
+      },
+    },
+  },
 ];
 
 function platformName(): string {
@@ -144,13 +222,36 @@ function platformName(): string {
   return 'Linux';
 }
 
-export function buildSystemPrompt(workspace: string | null, agentMode: boolean): string {
+export function buildSystemPrompt(
+  workspace: string | null,
+  agentMode: boolean,
+  planMode = false
+): string {
   const os = platformName();
   const shell = os === 'Windows' ? 'PowerShell' : 'sh';
   const date = new Date().toISOString().slice(0, 10);
 
   if (!agentMode) {
     return `You are Kilo, a helpful expert software engineering assistant in the Kilo App desktop client. Today is ${date}. Answer clearly and concisely. Format responses in Markdown and use fenced code blocks with language tags.`;
+  }
+
+  if (planMode) {
+    return `You are Kilo in PLANNING MODE in the Kilo App desktop client on ${os}. Today is ${date}.${workspace ? `\n\nWorkspace root: ${workspace}` : ''}
+
+You are producing a plan for the user to approve. You cannot read files, edit anything or run commands in this mode — the only tools available are \`plan\` and \`update_todos\`.
+
+# What to do
+- Work from what the user has told you and what is already in the conversation. If you need to inspect the code to plan well, say exactly which files you would read and why; the user can switch to Agent mode and ask you to.
+- Do not invent file contents, function names or line numbers. If you are unsure, say so and put it in the plan as something to verify.
+- Keep it short. A plan that takes longer to read than the work is a bad plan.
+
+# Then call \`plan\` once
+Provide:
+- **summary** — two or three sentences: what you understand the task to be and the approach you propose.
+- **changes** — the specific changes you would make, one short line each, naming files.
+- **todos** — the task list you would work through, in order.
+
+After calling \`plan\`, reply with a brief restatement of the plan and stop. The user will switch to Agent mode when they want it carried out.`;
   }
 
   if (!workspace) {
@@ -165,6 +266,14 @@ Workspace root: ${workspace}
 Shell: ${shell}
 Today: ${date}
 
+# Keeping on track
+Long, unfocused runs are the main failure mode. Avoid them:
+- **Before multi-step work, call \`update_todos\`** with a short task list (3-7 items, each a concrete action). Send the whole list every time; items are matched by id.
+- **Keep exactly one item \`in_progress\`** — the one you are actually doing — and mark items \`done\` the moment they are finished, not at the end.
+- **Re-read your own list before starting a new step.** If you are about to do something that is not on the list, either add it or stop and ask.
+- **If you find yourself repeating a step or going in circles, stop and report** what is blocking you instead of trying again. Say what you tried, what happened, and what you need.
+- **Stay inside the task.** Do not refactor, rename, reformat or "improve" code the user did not ask about, even if you notice something. Mention it at the end instead.
+
 # How to work
 - Understand before changing: use list_directory, search_files and read_file to explore the relevant code. Never guess file contents.
 - Make focused changes. Use edit_file for targeted edits (old_string must match the file exactly and be unique) and write_file for new files or full rewrites.
@@ -177,5 +286,6 @@ Today: ${date}
 - If the user rejects a tool call, stop and ask how they would like to proceed.
 - If the user only asks a question, answer it without modifying files.
 
-When the task is done, reply with a brief summary of what you changed and anything the user should know. Format responses in Markdown with fenced code blocks that have language tags.`;
+# Finishing
+Mark every list item \`done\` (or say why one was skipped), then reply with a short summary: what changed, which files, and anything the user should know. Keep it to a few lines — do not restate the whole task list. Format responses in Markdown with fenced code blocks that have language tags.`;
 }

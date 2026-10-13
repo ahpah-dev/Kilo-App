@@ -199,6 +199,29 @@ export interface Conversation {
   messages: UiMessage[];
   created_at: string;
   updated_at: string;
+  /** Latest task list from the agent's `update_todos` calls. */
+  todos?: Todo[];
+  /** Latest plan the agent produced in planning mode. */
+  plan?: AgentPlan;
+  /** Set when a run was cut short because the agent stopped making progress. */
+  stalled?: boolean;
+}
+
+export type TodoStatus = 'pending' | 'in_progress' | 'done';
+
+export interface Todo {
+  id: string;
+  title: string;
+  status: TodoStatus;
+}
+
+/** A proposal recorded by the `plan` tool; nothing is changed by producing it. */
+export interface AgentPlan {
+  summary: string;
+  changes: string[];
+  todos: Todo[];
+  /** When the plan was recorded, for ordering against later edits. */
+  recordedAt: string;
 }
 
 export type Theme =
@@ -373,7 +396,8 @@ export const KILOCODE_FREE_MODELS = [
 
 export const DEFAULT_MODEL = 'kilo-auto/free';
 
-export type ChatMode = 'agent' | 'chat';
+/** `plan` can read nothing and change nothing: it produces a proposal only. */
+export type ChatMode = 'agent' | 'chat' | 'plan';
 
 export interface AgentSettings {
   autoApproveEdits: boolean;

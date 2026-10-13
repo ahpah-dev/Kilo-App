@@ -15,6 +15,14 @@ const filter = ref('');
 const confirmDelete = ref<string | null>(null);
 const editingId = ref<string | null>(null);
 const editTitle = ref('');
+const todosOpen = ref(true);
+
+/** Task list for the conversation in view, newest state first. */
+const todos = computed(() => chat.activeConversation?.todos ?? []);
+const doneCount = computed(() => todos.value.filter((t) => t.status === 'done').length);
+const progress = computed(() =>
+  todos.value.length ? Math.round((doneCount.value / todos.value.length) * 100) : 0
+);
 
 const DAY = 86_400_000;
 
@@ -142,6 +150,30 @@ const navItems = [
     </div>
 
     <div class="sidebar-bottom">
+      <!-- The agent's working task list: the fastest way to see whether it is
+           still doing something useful, or has drifted. -->
+      <div v-if="todos.length" class="todos">
+        <button class="todos-head" @click="todosOpen = !todosOpen">
+          <Icon name="list" :size="13" />
+          <span class="todos-title">Tasks</span>
+          <span class="todos-count">{{ doneCount }}/{{ todos.length }}</span>
+          <span class="todos-bar" :aria-label="`${doneCount} of ${todos.length} done`">
+            <span class="todos-fill" :style="{ width: `${progress}%` }"></span>
+          </span>
+          <Icon :name="todosOpen ? 'chevron-down' : 'chevron-right'" :size="13" />
+        </button>
+        <div v-if="todosOpen" class="todos-list">
+          <div v-for="todo in todos" :key="todo.id" class="todo" :class="todo.status">
+            <span class="todo-mark">
+              <Icon v-if="todo.status === 'done'" name="check" :size="11" />
+              <span v-else-if="todo.status === 'in_progress'" class="todo-dot"></span>
+              <span v-else class="todo-circle"></span>
+            </span>
+            <span class="todo-title">{{ todo.title }}</span>
+          </div>
+        </div>
+      </div>
+
       <button class="nav-item ws" :title="gateway.workspace ?? 'Open a workspace folder'" @click="gateway.pickWorkspace()">
         <Icon :name="gateway.workspace ? 'folder' : 'folder-open'" :size="15" />
         <span class="nav-text">
@@ -341,6 +373,127 @@ const navItems = [
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* ===== Agent task list ===== */
+
+.todos {
+  margin-bottom: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.todos-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: 100%;
+  padding: 5px 4px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.todos-head:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.todos-title {
+  flex-shrink: 0;
+}
+
+.todos-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.todos-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--bg-hover);
+  overflow: hidden;
+}
+
+.todos-fill {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+
+.todos-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 2px 4px 0;
+  max-height: 190px;
+  overflow-y: auto;
+}
+
+.todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 3px 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.todo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+}
+
+.todo-circle {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  opacity: 0.5;
+}
+
+.todo-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.todo-title {
+  min-width: 0;
+}
+
+.todo.done {
+  color: var(--text-tertiary);
+}
+
+.todo.done .todo-title {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+
+.todo.done .todo-mark {
+  color: var(--success);
+}
+
+.todo.in_progress {
+  color: var(--text-primary);
+}
+
+.todo.in_progress .todo-title {
+  font-weight: 600;
 }
 
 .nav-item {

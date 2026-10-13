@@ -231,6 +231,82 @@ impl Workspace {
         result.unwrap_or_else(ToolOutput::err)
     }
 
+    /// Tools that need no workspace: they read or write nothing on disk, so they
+    /// stay usable even when no folder is open.
+    pub fn is_workspace_free(name: &str) -> bool {
+        matches!(name, "update_todos" | "plan")
+    }
+
+    /// The agent's working task list. Stateless: the authoritative copy lives in
+    /// the conversation, so this only validates and reports progress.
+    pub fn update_todos(args: &serde_json::Value) -> ToolResult {
+        let todos = parse_todos(args)?;
+        let (done, active, pending) = summarise_todos(&todos);
+
+        let mut out = format!(
+            "Task list updated: {} total — {done} done, {active} in progress, {pending} pending.\n",
+            todos.len()
+        );
+        for todo in &todos {
+            let mark = match todo.status.as_str() {
+                "done" => "[x]",
+                "in_progress" => "[~]",
+                _ => "[ ]",
+            };
+            out.push_str(&format!("{mark} {} — {}\n", todo.id, todo.title));
+        }
+
+        // Nudge the agent when its plan is stale or unstructured, which is the
+        // usual cause of a long, unfocused run.
+        if active == 0 && pending > 0 {
+            out.push_str("\nNothing is marked in progress. Set the item you are working on now to `in_progress`, and keep exactly one in progress at a time.");
+        } else if active > 1 {
+            out.push_str("\nMore than one item is in progress. Mark all but the current one as `pending`.");
+        }
+        Ok(ToolOutput::ok(out))
+    }
+
+    /// Planning mode's only output: a summary the user reads before anything is
+    /// allowed to change.
+    pub fn plan(args: &serde_json::Value) -> ToolResult {
+        let summary = str_arg(args, "summary")?;
+        let changes = args
+            .get("changes")
+            .and_then(|v| v.as_array())
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|i| i.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let todos = parse_todos(args).unwrap_or_default();
+        let (done, active, pending) = summarise_todos(&todos);
+
+        let mut out = format!("Plan recorded.\n\n## Summary\n{}\n", summary.trim());
+        if !changes.is_empty() {
+            out.push_str("\n## Proposed changes\n");
+            for change in &changes {
+                out.push_str(&format!("- {change}\n"));
+            }
+        }
+        if !todos.is_empty() {
+            out.push_str(&format!(
+                "\n## Tasks ({done} done, {active} in progress, {pending} pending)\n"
+            ));
+            for todo in &todos {
+                out.push_str(&format!("- {} — {}\n", todo.id, todo.title));
+            }
+        }
+        out.push_str(
+            "\nThis was a planning turn: nothing was changed. Present the plan to the user and wait for them to switch to Agent mode before editing files or running commands.",
+        );
+        Ok(ToolOutput::ok(out))
+    }
+
     fn list_directory(&self, args: &serde_json::Value) -> ToolResult {
         let dir = self.resolve(opt_str(args, "path").unwrap_or("."))?;
         if !dir.is_dir() {
@@ -570,6 +646,97 @@ pub fn parse_arguments(raw: &str) -> Result<serde_json::Value, String> {
     serde_json::from_str(raw).map_err(|e| format!("Tool arguments are not valid JSON: {e}"))
 }
 
+/// A task in the agent's working list. Held in memory for the process lifetime
+/// so the agent can tick items off without touching the workspace.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TodoItem {
+    pub id: String,
+    pub title: String,
+    pub status: String,
+}
+
+/// Task ids are only used for merging, so normalise them to lower kebab-case.
+fn normalise_id(raw: &str) -> String {
+    let mut out = String::with_capacity(raw.len());
+    let mut last_dash = true;
+    for ch in raw.trim().chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_lowercase());
+            last_dash = false;
+        } else if !last_dash {
+            out.push('-');
+            last_dash = true;
+        }
+    }
+    while out.ends_with('-') {
+        out.pop();
+    }
+    out
+}
+
+fn normalise_status(raw: &str) -> String {
+    match normalise_id(raw).as_str() {
+        "done" | "complete" | "completed" | "finished" => "done",
+        "in-progress" | "active" | "doing" | "started" => "in_progress",
+        _ => "pending",
+    }
+    .to_string()
+}
+
+fn parse_todos(args: &serde_json::Value) -> Result<Vec<TodoItem>, String> {
+    let raw = args
+        .get("todos")
+        .and_then(|v| v.as_array())
+        .ok_or("Missing required array argument `todos`")?;
+    if raw.is_empty() {
+        return Err(
+            "`todos` must keep at least one item. Send the full list, not a delta.".to_string(),
+        );
+    }
+
+    let mut todos: Vec<TodoItem> = Vec::new();
+    for (index, entry) in raw.iter().enumerate() {
+        let title = entry
+            .get("title")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("Item {} is missing a non-empty `title`", index + 1))?;
+
+        let id = entry
+            .get("id")
+            .and_then(|v| v.as_str())
+            .map(normalise_id)
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| normalise_id(title));
+        if id.is_empty() {
+            return Err(format!("Item {} has no usable id or title", index + 1));
+        }
+
+        let status = entry
+            .get("status")
+            .and_then(|v| v.as_str())
+            .map(normalise_status)
+            .unwrap_or_else(|| "pending".to_string());
+
+        // Merging happens on the frontend so the list survives a reload; here we
+        // only validate and report, which keeps the model's view consistent.
+        todos.push(TodoItem {
+            id,
+            title: title.chars().take(120).collect(),
+            status,
+        });
+    }
+    Ok(todos)
+}
+
+fn summarise_todos(todos: &[TodoItem]) -> (usize, usize, usize) {
+    let done = todos.iter().filter(|t| t.status == "done").count();
+    let active = todos.iter().filter(|t| t.status == "in_progress").count();
+    let pending = todos.len() - done - active;
+    (done, active, pending)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -703,6 +870,92 @@ mod tests {
         let out = run(&ws, "write_file", json!({"path": "escape.txt", "content": "x"})).await;
         assert!(!out.ok, "writing through a dangling link must be refused, got: {}", out.output);
         assert!(!target.exists(), "the file must not be created outside the workspace");
+    }
+
+    #[test]
+    fn todo_ids_are_normalised_for_merging() {
+        assert_eq!(normalise_id("Add Login Form"), "add-login-form");
+        assert_eq!(normalise_id("  add_login  "), "add-login");
+        assert_eq!(normalise_id("Already-kebab"), "already-kebab");
+        assert_eq!(normalise_id("!!!"), "");
+    }
+
+    #[test]
+    fn todo_statuses_accept_common_spellings() {
+        assert_eq!(normalise_status("done"), "done");
+        assert_eq!(normalise_status("Completed"), "done");
+        assert_eq!(normalise_status("in progress"), "in_progress");
+        assert_eq!(normalise_status("DOING"), "in_progress");
+        assert_eq!(normalise_status("pending"), "pending");
+        assert_eq!(normalise_status("nonsense"), "pending");
+    }
+
+    #[test]
+    fn update_todos_reports_progress_and_prompts_for_structure() {
+        // Nothing in progress while work remains: the tool nudges the agent.
+        let out = Workspace::update_todos(&json!({
+            "todos": [
+                {"id": "explore", "title": "Explore the repo", "status": "done"},
+                {"id": "edit", "title": "Edit the file", "status": "pending"}
+            ]
+        }))
+        .expect("valid list");
+        assert!(out.ok);
+        assert!(out.output.contains("1 done, 0 in progress, 1 pending"));
+        assert!(out.output.contains("[x] explore"));
+        assert!(out.output.contains("[ ] edit"));
+        assert!(out.output.contains("Nothing is marked in progress"));
+    }
+
+    #[test]
+    fn update_todos_flags_multiple_items_in_progress() {
+        let out = Workspace::update_todos(&json!({
+            "todos": [
+                {"id": "a", "title": "A", "status": "in_progress"},
+                {"id": "b", "title": "B", "status": "in_progress"}
+            ]
+        }))
+        .expect("valid list");
+        assert!(out.output.contains("More than one item is in progress"));
+    }
+
+    #[test]
+    fn update_todos_rejects_an_empty_list() {
+        let err = Workspace::update_todos(&json!({"todos": []})).unwrap_err();
+        assert!(err.contains("at least one item"), "got: {err}");
+    }
+
+    #[test]
+    fn update_todos_requires_a_title_per_item() {
+        let err = Workspace::update_todos(&json!({"todos": [{"id": "x", "status": "done"}]}))
+            .unwrap_err();
+        assert!(err.contains("title"), "got: {err}");
+    }
+
+    #[test]
+    fn planning_tools_need_no_workspace() {
+        assert!(Workspace::is_workspace_free("update_todos"));
+        assert!(Workspace::is_workspace_free("plan"));
+        for tool in ["read_file", "write_file", "edit_file", "run_command", "delete_path", "search_files", "list_directory"] {
+            assert!(!Workspace::is_workspace_free(tool), "{tool} must need a workspace");
+        }
+    }
+
+    #[test]
+    fn plan_records_summary_changes_and_tasks() {
+        let out = Workspace::plan(&json!({
+            "summary": "Add a settings toggle.",
+            "changes": ["src/types/index.ts: add the flag", "src/stores/gateway.ts: persist it"],
+            "todos": [{"id": "types", "title": "Add the flag", "status": "pending"}]
+        }))
+        .expect("valid plan");
+        assert!(out.ok);
+        assert!(out.output.contains("## Summary"));
+        assert!(out.output.contains("Add a settings toggle."));
+        assert!(out.output.contains("## Proposed changes"));
+        assert!(out.output.contains("src/stores/gateway.ts: persist it"));
+        assert!(out.output.contains("## Tasks"));
+        assert!(out.output.contains("nothing was changed"));
     }
 
     #[test]

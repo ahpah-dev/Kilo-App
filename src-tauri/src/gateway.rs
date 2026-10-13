@@ -801,11 +801,89 @@ mod tests {
         assert_eq!(msg.tool_calls.unwrap().len(), 1);
     }
 
+    /// Verifies the gateway accepts the task-list/planning tool schemas and that
+    /// a free model actually calls `update_todos` when asked to plan its work.
+    #[tokio::test]
+    #[ignore = "hits the live Kilo Gateway"]
+    async fn live_model_calls_update_todos() {
+        let client = client();
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "model": "kilo-auto/free",
+            "messages": [
+                {"role": "system", "content": "You keep a task list. Before doing work, record it with update_todos."},
+                {"role": "user", "content": "Use update_todos to record these three tasks: explore the codebase, add the feature, run the tests."}
+            ],
+            "max_tokens": 400,
+            "tools": [{
+                "type": "function",
+                "function": {
+                    "name": "update_todos",
+                    "description": "Create or update the working task list. Send the full list every time.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {
+                            "todos": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "title": {"type": "string"},
+                                        "status": {"type": "string", "enum": ["pending", "in_progress", "done"]}
+                                    },
+                                    "required": ["title"]
+                                }
+                            }
+                        },
+                        "required": ["todos"]
+                    }
+                }
+            }]
+        }))
+        .unwrap();
+
+        // Collect the streamed tool-call arguments exactly as the UI does.
+        let collected = std::sync::Mutex::new(String::new());
+        let name = std::sync::Mutex::new(String::new());
+        let cancelled = client
+            .chat_completion_stream(request, Arc::new(CancelToken::default()), |event| {
+                if let StreamEvent::Chunk(value) = event {
+                    if let Some(calls) = value["choices"][0]["delta"]["tool_calls"].as_array() {
+                        for call in calls {
+                            if let Some(n) = call["function"]["name"].as_str() {
+                                *name.lock().unwrap() = format!("{}{n}", name.lock().unwrap());
+                            }
+                            if let Some(args) = call["function"]["arguments"].as_str() {
+                                collected.lock().unwrap().push_str(args);
+                            }
+                        }
+                    }
+                }
+            })
+            .await
+            .expect("the gateway should accept the todo schema");
+        assert!(!cancelled);
+
+        let called = name.lock().unwrap().clone();
+        assert_eq!(called, "update_todos", "the model should use the task-list tool");
+
+        let args = collected.lock().unwrap().clone();
+        let parsed: serde_json::Value =
+            serde_json::from_str(&args).unwrap_or_else(|e| panic!("arguments were not JSON ({e}): {args}"));
+        assert!(
+            parsed["todos"].as_array().is_some_and(|a| !a.is_empty()),
+            "expected a non-empty todos array, got: {args}"
+        );
+        // The backend validator must accept exactly what the model produced.
+        let output = crate::tools::Workspace::update_todos(&parsed)
+            .expect("model output should pass validation");
+        assert!(output.ok, "{}", output.output);
+    }
+
     /// Live smoke test against the real Kilo Gateway: `cargo test -- --ignored`.
     #[tokio::test]
     #[ignore = "hits the live Kilo Gateway"]
-    async fn live_gateway_returns_free_models() {
-        let client = client();
+    async fn live_gateway_returns_free_models() {        let client = client();
         let free = client
             .get_free_models()
             .await

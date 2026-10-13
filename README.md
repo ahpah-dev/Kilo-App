@@ -13,10 +13,18 @@ WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts in
 
 ## Features
 
+- **Three modes** — **Agent** (works in your folder), **Plan** (proposes an approach
+  and a task list, changing nothing) and **Chat** (conversation only, no tools).
+- **A visible task list** — before multi-step work the agent records what it is going
+  to do, ticks items off as it goes, and the list stays in the sidebar so you can see
+  whether it is still on track.
+- **Stops when it stops progressing** — if the agent repeats the same tool call over
+  and over, the run is cut short and you are told, rather than spinning until the step
+  limit.
 - **Agentic coding in your workspace** — open a folder and Kilo explores it with real
   tools instead of guessing at file contents.
-- **Seven built-in tools** — `list_directory`, `read_file`, `search_files`, `write_file`,
-  `edit_file`, `delete_path` and `run_command`.
+- **Seven filesystem tools** — `list_directory`, `read_file`, `search_files`, `write_file`,
+  `edit_file`, `delete_path` and `run_command`, plus `update_todos` and `plan`.
 - **Approval before anything destructive** — reads run freely; writes and commands ask
   first. Auto-approve can be enabled per category in Settings.
 - **Streaming responses** — tokens, visible reasoning and live tool-call cards as they

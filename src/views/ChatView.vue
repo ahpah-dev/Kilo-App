@@ -213,12 +213,34 @@ onBeforeUnmount(() => {
         <Icon name="info" :size="13" /> {{ notice }}
       </div>
 
+      <div v-if="chat.stalled" class="notice stalled">
+        <Icon name="alert" :size="13" />
+        <span>Kilo stopped because it repeated the same action without progress.</span>
+        <button class="btn btn-secondary btn-sm" @click="chat.retry()">
+          <Icon name="refresh" :size="12" /> Retry
+        </button>
+      </div>
+
+      <div v-if="gateway.mode === 'plan'" class="notice plan">
+        <Icon name="list" :size="13" />
+        <span>
+          <strong>Planning mode.</strong> Kilo proposes an approach and a task list only —
+          it cannot read files, edit anything or run commands. Switch to Agent when you want it carried out.
+        </span>
+      </div>
+
       <div class="composer" :class="{ running: chat.isActiveRunning }" @click.self="textarea?.focus()">
         <textarea
           ref="textarea"
           v-model="input"
           rows="1"
-          :placeholder="agentMode ? 'Ask Kilo to build, fix or explain something…' : 'Message Kilo…'"
+          :placeholder="
+            agentMode
+              ? 'Ask Kilo to build, fix or explain something…'
+              : gateway.mode === 'plan'
+                ? 'Describe what you want Kilo to plan…'
+                : 'Message Kilo…'
+          "
           spellcheck="true"
           @input="autoGrow"
           @keydown="onKeydown"
@@ -233,13 +255,24 @@ onBeforeUnmount(() => {
             >
               <Icon name="bolt" :size="13" /> Agent
             </button>
-            <button :class="{ active: !agentMode }" title="Chat: conversation only, no tools" @click="gateway.mode = 'chat'">
+            <button
+              :class="{ active: gateway.mode === 'plan' }"
+              title="Plan: propose an approach and a task list — changes nothing"
+              @click="gateway.mode = 'plan'"
+            >
+              <Icon name="list" :size="13" /> Plan
+            </button>
+            <button
+              :class="{ active: gateway.mode === 'chat' }"
+              title="Chat: conversation only, no tools"
+              @click="gateway.mode = 'chat'"
+            >
               <Icon name="chat" :size="13" /> Chat
             </button>
           </div>
 
           <button
-            v-if="agentMode"
+            v-if="agentMode || gateway.mode === 'plan'"
             class="ws-chip"
             :class="{ empty: !gateway.workspace }"
             :title="gateway.workspace ?? 'Open a workspace folder'"
@@ -509,6 +542,39 @@ onBeforeUnmount(() => {
   padding: 0 4px;
   font-size: 12px;
   color: var(--warning);
+}
+
+/* Stopped for lack of progress: actionable, so it gets a box. */
+.notice.stalled {
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--error) 30%, transparent);
+  color: var(--error);
+}
+
+/* Planning mode reminder; informational rather than a warning. */
+.notice.plan {
+  align-items: flex-start;
+  margin-bottom: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-dim);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.notice.plan strong {
+  color: var(--accent-hover);
+}
+
+.notice.plan .icon {
+  margin-top: 2px;
+  color: var(--accent-hover);
 }
 
 .composer {

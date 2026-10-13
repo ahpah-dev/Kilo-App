@@ -1,15 +1,26 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import type {
+  AgentPlan,
   ChatCompletionChunk,
   ChatMessage,
   Conversation,
+  Todo,
+  TodoStatus,
+  Tool,
   ToolCall,
   ToolState,
   UiMessage,
 } from '@/types';
 import { kiloApi, errorMessage } from '@/services/kiloApi';
-import { AGENT_TOOLS, TOOL_META, buildSystemPrompt } from '@/services/tools';
+import {
+  AGENT_TOOLS,
+  PLAN_MODE_TOOLS,
+  PLAN_TOOL,
+  TODO_TOOL,
+  TOOL_META,
+  buildSystemPrompt,
+} from '@/services/tools';
 import { useGatewayStore } from '@/stores/gateway';
 
 const STORAGE_KEY = 'kilo-app-conversations';
@@ -17,6 +28,41 @@ const MAX_CONVERSATIONS = 100;
 /** Older tool results are trimmed when resent to keep requests within context. */
 const RECENT_TOOL_RESULTS = 12;
 const OLD_TOOL_RESULT_CHARS = 2000;
+/** Identical tool calls this many times in a row means the agent is stuck. */
+const REPEAT_LIMIT = 6;
+
+const TODO_STATUSES: readonly TodoStatus[] = ['pending', 'in_progress', 'done'];
+
+/**
+ * Planning mode gets only the tools that touch nothing: `plan` and
+ * `update_todos`. Restricting the tool list (rather than only prompting for it)
+ * is what actually guarantees planning cannot edit files or run commands.
+ */
+const PLAN_TOOL_SET: Tool[] = AGENT_TOOLS.filter((tool) =>
+  (PLAN_MODE_TOOLS as readonly string[]).includes(tool.function.name)
+);
+
+/** Read the task list out of an `update_todos` / `plan` arguments blob. */
+function readTodos(args: string): Todo[] {
+  try {
+    const parsed = JSON.parse(args) as { todos?: unknown };
+    if (!Array.isArray(parsed.todos)) return [];
+    return parsed.todos.flatMap((raw) => {
+      if (!raw || typeof raw !== 'object') return [];
+      const entry = raw as { id?: unknown; title?: unknown; status?: unknown };
+      const title = typeof entry.title === 'string' ? entry.title.trim() : '';
+      if (!title) return [];
+      const id = typeof entry.id === 'string' && entry.id.trim() ? entry.id.trim() : title;
+      const status =
+        typeof entry.status === 'string' && (TODO_STATUSES as readonly string[]).includes(entry.status)
+          ? (entry.status as TodoStatus)
+          : 'pending';
+      return [{ id, title, status } as Todo];
+    });
+  } catch {
+    return [];
+  }
+}
 
 export type ApprovalDecision = 'approve' | 'reject';
 
@@ -130,6 +176,9 @@ export const useChatStore = defineStore('chat', () => {
   const isActiveRunning = computed(
     () => run.value !== null && run.value.conversationId === activeConversationId.value
   );
+
+  /** The active conversation was cut short because the agent stopped progressing. */
+  const stalled = computed(() => activeConversation.value?.stalled === true);
 
   /** Files touched by the agent in the active conversation, most recent first. */
   const changedFiles = computed(() => {
@@ -278,8 +327,15 @@ export const useChatStore = defineStore('chat', () => {
     const current: ActiveRun = { conversationId, aborted: false, currentOpId: null };
     run.value = current;
     const settings = gateway.agentSettings;
-    const agentMode = gateway.mode === 'agent';
-    const toolsEnabled = agentMode && !!gateway.workspace && gateway.activeModelSupportsTools;
+    const chatMode = gateway.mode;
+    const agentMode = chatMode === 'agent';
+    const planMode = chatMode === 'plan';
+    const toolMode = agentMode || planMode;
+    const toolsEnabled = toolMode && gateway.activeModelSupportsTools;
+    /** Signatures of recent tool calls, used to notice a stuck agent. */
+    const recentSignatures: string[] = [];
+    let stalled = false;
+    conv.stalled = false;
 
     try {
       for (let step = 0; step < settings.maxSteps; step++) {
@@ -297,10 +353,15 @@ export const useChatStore = defineStore('chat', () => {
               model: gateway.defaultModel,
               messages: toApiMessages(
                 conv.messages.filter((m) => m.id !== assistant.id),
-                buildSystemPrompt(gateway.workspace, agentMode)
+                buildSystemPrompt(gateway.workspace, agentMode, planMode)
               ),
               temperature: settings.temperature,
-              ...(toolsEnabled ? { tools: AGENT_TOOLS, tool_choice: 'auto' as const } : {}),
+              ...(toolsEnabled
+                ? {
+                    tools: planMode ? PLAN_TOOL_SET : AGENT_TOOLS,
+                    tool_choice: 'auto' as const,
+                  }
+                : {}),
             },
             (chunk) => applyChunk(assistant, chunk),
             // The backend waits out a gateway rate limit; tell the user why.
@@ -350,9 +411,24 @@ export const useChatStore = defineStore('chat', () => {
           break;
         }
 
-        const rejected = await executeToolCalls(conv, calls, current);
+        const rejected = await executeToolCalls(conv, calls, current, recentSignatures);
         persist();
         if (rejected || current.aborted) break;
+
+        if (isStalled(recentSignatures)) {
+          stalled = true;
+          conv.stalled = true;
+          pushMessage(
+            conv,
+            newMessage({
+              role: 'assistant',
+              content:
+                `_Stopped: the last ${REPEAT_LIMIT} tool calls were identical (${calls[0]?.function.name}), so the agent was not making progress. ` +
+                'Nothing further was attempted. Tell Kilo what to do differently, or check the task list and try again._',
+            })
+          );
+          break;
+        }
 
         if (step === settings.maxSteps - 1) {
           pushMessage(
@@ -368,7 +444,17 @@ export const useChatStore = defineStore('chat', () => {
       run.value = null;
       approvals.clear();
       persist();
+      if (stalled) {
+        logStall(conv);
+      }
     }
+  }
+
+  /** Surfaced in the UI as a banner; also useful in the log when debugging. */
+  function logStall(conv: Conversation): void {
+    console.warn(
+      `[kilo] run stopped: ${REPEAT_LIMIT} identical tool calls in a row in conversation ${conv.id}`
+    );
   }
 
   function applyChunk(msg: UiMessage, chunk: ChatCompletionChunk): void {
@@ -414,7 +500,12 @@ export const useChatStore = defineStore('chat', () => {
   }
 
   /** Execute tool calls in order. Returns true if the user rejected one. */
-  async function executeToolCalls(conv: Conversation, calls: ToolCall[], current: ActiveRun): Promise<boolean> {
+  async function executeToolCalls(
+    conv: Conversation,
+    calls: ToolCall[],
+    current: ActiveRun,
+    recentSignatures: string[]
+  ): Promise<boolean> {
     const gateway = useGatewayStore();
     const toolMessages = calls.map((call) =>
       pushMessage(
@@ -436,9 +527,13 @@ export const useChatStore = defineStore('chat', () => {
         continue;
       }
 
-      const risk = TOOL_META[call.function.name]?.risk ?? 'exec';
+      const name = call.function.name;
+      const risk = TOOL_META[name]?.risk ?? 'exec';
+      // `plan` risk covers the planning tools, which change nothing, so they
+      // never need approval.
       const autoApproved =
         risk === 'read' ||
+        risk === 'plan' ||
         (risk === 'write' && gateway.agentSettings.autoApproveEdits) ||
         (risk === 'exec' && gateway.agentSettings.autoApproveCommands);
 
@@ -456,10 +551,24 @@ export const useChatStore = defineStore('chat', () => {
         }
       }
 
+      // The plan and task list are the user's view of what the agent is doing,
+      // so they are taken from the arguments whether or not the call succeeds.
+      if (name === TODO_TOOL || name === PLAN_TOOL) {
+        const todos = readTodos(call.function.arguments);
+        if (todos.length) {
+          conv.todos = mergeTodos(conv.todos, todos);
+          conv.updated_at = now();
+        }
+        if (name === PLAN_TOOL) {
+          const plan = readPlan(call.function.arguments, todos);
+          if (plan) conv.plan = plan;
+        }
+      }
+
       toolMsg.toolState = 'running';
       current.currentOpId = toolMsg.id;
       try {
-        const result = await kiloApi.executeTool(toolMsg.id, call.function.name, call.function.arguments);
+        const result = await kiloApi.executeTool(toolMsg.id, name, call.function.arguments);
         toolMsg.content = result.output;
         toolMsg.toolState = result.ok ? 'success' : 'error';
         if (result.changed_path) toolMsg.changedPath = result.changed_path;
@@ -469,8 +578,48 @@ export const useChatStore = defineStore('chat', () => {
       } finally {
         current.currentOpId = null;
       }
+
+      // Notice a stuck agent: the same call, with the same arguments, over and
+      // over. Only meaningful once work has actually started.
+      const signature = `${name}:${call.function.arguments}`;
+      recentSignatures.push(signature);
+      if (recentSignatures.length > REPEAT_LIMIT) recentSignatures.shift();
     }
     return rejected;
+  }
+
+  /** True when the last REPEAT_LIMIT calls were all identical. */
+  function isStalled(recentSignatures: string[]): boolean {
+    return (
+      recentSignatures.length >= REPEAT_LIMIT &&
+      recentSignatures.every((sig) => sig === recentSignatures[0])
+    );
+  }
+
+  /** Merge by id so a partial list updates rather than replaces. */
+  function mergeTodos(existing: Todo[] | undefined, incoming: Todo[]): Todo[] {
+    const order: string[] = [];
+    const byId = new Map<string, Todo>();
+    for (const todo of [...(existing ?? []), ...incoming]) {
+      if (!byId.has(todo.id)) order.push(todo.id);
+      byId.set(todo.id, todo);
+    }
+    return order.map((id) => byId.get(id)!);
+  }
+
+  /** Read a `plan` call's arguments into the stored plan shape. */
+  function readPlan(args: string, todos: Todo[]): AgentPlan | null {
+    try {
+      const parsed = JSON.parse(args) as { summary?: unknown; changes?: unknown };
+      const summary = typeof parsed.summary === 'string' ? parsed.summary.trim() : '';
+      if (!summary) return null;
+      const changes = Array.isArray(parsed.changes)
+        ? parsed.changes.filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+        : [];
+      return { summary, changes, todos, recordedAt: now() };
+    } catch {
+      return null;
+    }
   }
 
   return {
@@ -481,6 +630,7 @@ export const useChatStore = defineStore('chat', () => {
     isRunning,
     runningConversationId,
     isActiveRunning,
+    stalled,
     changedFiles,
     createConversation,
     startNewChat,
