@@ -7,7 +7,7 @@ your project folder: reading files, making focused edits and running commands.
 Built with [Tauri 2](https://tauri.app) + Vue 3 + TypeScript. The UI runs in the system
 WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts instantly.
 
-**[Website](https://ahpah-dev.github.io/kilo-app/)** · **[Download](../../releases/latest)** · **[Report an issue](../../issues)**
+**[Website](https://ahpah-dev.github.io/Kilo-App/)** · **[Download](../../releases/latest)** · **[Report an issue](../../issues)**
 
 ---
 
@@ -46,7 +46,7 @@ handles it on Windows 10).
 **Prerequisites:** Node 18+, Rust 1.90+, and the WebView2 runtime.
 
 ```bash
-git clone https://github.com/ahpah-dev/kilo-app.git
+git clone https://github.com/ahpah-dev/Kilo-App.git
 cd kilo-app
 npm install
 npm run tauri dev      # development, with hot reload
