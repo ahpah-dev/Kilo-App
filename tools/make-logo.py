@@ -1,16 +1,17 @@
 """Generate the Kilo App logo and the full Tauri icon set.
 
-The brand mark is the isometric cube used by the in-app logo (src/components/Icon.vue)
-and the web favicon: a hexagonal outline with the three interior edges meeting at
-the centre, plus a centre dot.
+The brand mark is a white "K" on the indigo gradient tile used throughout the
+app: a diagonal gradient from --accent-hover to the deep indigo, on a rounded
+square with a soft top sheen.
 
 Usage:
-    python make-logo.py            # writes all icons + assets/logo.svg + preview
+    python make-logo.py            # writes all icons + assets/ + preview sheet
 """
 from __future__ import annotations
 
+import argparse
 import os
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 ICON_DIR = os.path.join("src-tauri", "icons")
 ASSET_DIR = "assets"
@@ -22,10 +23,33 @@ ACCENT_LIGHT = (129, 140, 248)   # #818cf8
 ACCENT_BASE = (99, 102, 241)     # #6366f1
 ACCENT_DEEP = (67, 56, 202)      # #4338ca
 
-# Cube glyph geometry, in the 24x24 coordinate space of Icon.vue/favicon.svg.
 S = 4                            # supersampling factor
 CANVAS = 1024                    # master canvas size
-CUBE_BOX = 660                   # cube glyph bounding box inside the canvas
+# Cap height of the letter as a fraction of the canvas; tuned so the K has
+# balanced margins and stays legible at 16px.
+LETTER_CAP = 0.62
+# Horizontal optical adjustment, as a fraction of the canvas width. Left at 0:
+# centring the glyph's ink box already yields balanced margins, and any nudge
+# here would also have to be mirrored in tools/trace-k.py to stay consistent.
+LETTER_NUDGE_X = 0.0
+
+# Bold sans faces, in preference order. Segoe UI Bold matches the app's own
+# font stack (--font-sans in src/styles/main.css).
+FONT_CANDIDATES = (
+    r"C:\Windows\Fonts\segoeuib.ttf",     # Segoe UI Bold
+    r"C:\Windows\Fonts\seguisb.ttf",      # Segoe UI Semibold
+    r"C:\Windows\Fonts\arialbd.ttf",      # Arial Bold
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+)
+
+
+def find_font() -> str:
+    for path in FONT_CANDIDATES:
+        if os.path.exists(path):
+            return path
+    raise SystemExit(
+        "No bold sans font found. Add one to FONT_CANDIDATES in tools/make-logo.py."
+    )
 
 
 def lerp(a: float, b: float, t: float) -> float:
@@ -56,51 +80,45 @@ def rounded_mask(size: int, radius: int, ss: int = 4) -> Image.Image:
     return m.resize((size, size), Image.LANCZOS)
 
 
-def cube_points(box: int) -> dict:
-    """Scale the 24x24 cube path into a `box`-sized square."""
+def render_letter(size: int, letter: str, cap_ratio: float = LETTER_CAP) -> Image.Image:
+    """White `letter` on a transparent canvas, auto-fitted and centred.
 
-    def p(x: float, y: float):
-        return (x * box / 24.0, y * box / 24.0)
+    The point size is solved so the glyph's cap height is `cap_ratio` of the
+    canvas. Placement is then corrected from the *rendered* result rather than
+    from font metrics: `getbbox` reports the advance box, whose side bearings
+    differ per glyph, so metric-based centring leaves a visible offset. Drawing
+    once and measuring the ink box instead makes the margins balanced for any
+    letter and any face.
+    """
+    font_path = find_font()
+    target = size * cap_ratio
 
-    return {
-        "v_top": p(12, 2),
-        "v_ur": p(21, 7),
-        "v_lr": p(21, 17),
-        "v_bot": p(12, 22),
-        "v_ll": p(3, 17),
-        "v_ul": p(3, 7),
-        "v_mid": p(12, 12),
-        "v_dot": p(12, 12),
-        "dot_r": 2.0 * box / 24.0,
-    }
+    probe = 100
+    probe_font = ImageFont.truetype(font_path, probe)
+    _l, probe_top, _r, probe_bottom = probe_font.getbbox(letter)
+    point = max(1, round(probe * target / (probe_bottom - probe_top)))
+    font = ImageFont.truetype(font_path, point)
 
+    def draw_at(offset_x: float, offset_y: float) -> Image.Image:
+        layer = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+        ImageDraw.Draw(layer).text((offset_x, offset_y), letter, font=font,
+                                   fill=(255, 255, 255, 255))
+        return layer
 
-def draw_cube(img: Image.Image, box: int, offset: tuple, colour, stroke: int, ss: int = S):
-    """Draw the cube wireframe (hexagon outline + 3 interior edges + centre dot)."""
-    layer = Image.new("RGBA", (img.width * ss, img.height * ss), (0, 0, 0, 0))
-    d = ImageDraw.Draw(layer)
-    pts = cube_points(box)
-    ox, oy = offset[0] * ss, offset[1] * ss
-    w = max(1, round(stroke * ss))
+    # Pass 1: draw at the origin and measure where the ink actually landed.
+    first = draw_at(0.0, 0.0)
+    ink = first.getbbox()
+    if ink is None:
+        return first
+    ix0, iy0, ix1, iy1 = ink
 
-    def at(key):
-        return (pts[key][0] + ox, pts[key][1] + oy)
-
-    hexagon = [at("v_top"), at("v_ur"), at("v_lr"), at("v_bot"), at("v_ll"), at("v_ul")]
-    d.line(hexagon + [hexagon[0]], fill=colour, width=w, joint="curve")
-    for key in ("v_ul", "v_ur", "v_bot"):
-        d.line([at("v_mid"), at(key)], fill=colour, width=w, joint="curve")
-
-    # Centre dot, drawn as a filled circle to match the in-app logo.
-    cx, cy = at("v_dot")
-    r = pts["dot_r"] * ss
-    d.ellipse((cx - r, cy - r, cx + r, cy + r), fill=colour)
-
-    layer = layer.resize((img.width, img.height), Image.LANCZOS)
-    img.alpha_composite(layer)
+    # Pass 2: shift so the ink box is centred (plus any optical adjustment).
+    offset_x = (size - (ix1 - ix0)) / 2 - ix0 + size * LETTER_NUDGE_X
+    offset_y = (size - (iy1 - iy0)) / 2 - iy0
+    return draw_at(offset_x, offset_y)
 
 
-def compose_icon(size: int, background: bool = True, ss: int = S) -> Image.Image:
+def compose_icon(size: int, background: bool = True, ss: int = S, letter: str = "K") -> Image.Image:
     """Render the icon for the given `size` with `ss`x supersampling."""
     big = size * ss
     if background:
@@ -118,11 +136,13 @@ def compose_icon(size: int, background: bool = True, ss: int = S) -> Image.Image
     else:
         base = Image.new("RGBA", (big, big), (0, 0, 0, 0))
 
-    glyph_box = big * CUBE_BOX / CANVAS
-    offset = ((big - glyph_box) / 2, (big - glyph_box) / 2)
-    colour = (255, 255, 255, 255) if background else mix(ACCENT_LIGHT, ACCENT_DEEP, 0.45) + (255,)
-    # Stroke scales with the glyph so every export keeps the same optical weight.
-    draw_cube(base, glyph_box, offset, colour, stroke=max(1, round(big * 0.052)), ss=1)
+    glyph = render_letter(big, letter)
+    if not background:
+        # Tint the glyph with the brand gradient for use on light backgrounds.
+        tint = gradient(big, ACCENT_LIGHT, ACCENT_DEEP).convert("RGBA")
+        tint.putalpha(glyph.getchannel("A"))
+        glyph = tint
+    base.alpha_composite(glyph)
 
     return base.resize((size, size), Image.LANCZOS)
 
@@ -138,12 +158,24 @@ def save_png(img: Image.Image, path: str, size: int):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Generate the Kilo App logo and icon set.")
+    parser.add_argument("--letter", default="K", help="letter to draw on the tile (default: K)")
+    parser.add_argument(
+        "--cap",
+        type=float,
+        default=LETTER_CAP,
+        help=f"letter cap height as a fraction of the tile (default: {LETTER_CAP})",
+    )
+    args = parser.parse_args()
+    letter = args.letter
+
     os.makedirs(ICON_DIR, exist_ok=True)
     os.makedirs(ASSET_DIR, exist_ok=True)
     os.makedirs(PREVIEW_DIR, exist_ok=True)
 
-    print("rendering master icon...")
-    master = compose_icon(CANVAS, background=True)
+    print(f"font: {find_font()}")
+    print(f"rendering master icon with letter {letter!r}...")
+    master = compose_icon(CANVAS, background=True, letter=letter)
     master.save(os.path.join(ASSET_DIR, "logo-1024.png"), "PNG")
     print(f"  {ASSET_DIR}/logo-1024.png  1024x1024")
 
@@ -170,8 +202,8 @@ def main():
     except Exception as exc:  # Pillow needs specific sizes for ICNS
         print(f"  ICNS skipped: {exc}")
 
-    print("writing transparent cube glyph (for the website)...")
-    glyph = make_icon(512, background=False)
+    print("writing transparent letter glyph (for the website)...")
+    glyph = compose_icon(512, background=False, letter=letter)
     glyph.save(os.path.join(ASSET_DIR, "logo-glyph-512.png"), "PNG")
     print(f"  {ASSET_DIR}/logo-glyph-512.png  512x512")
 

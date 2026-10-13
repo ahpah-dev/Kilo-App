@@ -35,7 +35,10 @@ const ICONS = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   info: '<circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>',
   globe: '<circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>',
-  logo: '<path d="M12 2L3 7v10l9 5 9-5V7l-9-5z"/><path d="M12 22V12L3 7M12 12l9-5"/><circle cx="12" cy="12" r="2" fill="currentColor"/>',
+  // Brand mark: the letter K, traced from the app icon so the in-app logo, the
+  // favicon and the Windows icon all show the same letterform. It is a filled
+  // shape rather than a stroked outline; hence the inline fill/stroke overrides.
+  logo: '<path d="M5.82,4.58 L9.15,4.58 L9.18,11.61 L9.67,10.72 L13.75,4.58 L17.71,4.58 L12.55,11.68 L18.15,19.42 L13.96,19.42 L9.57,12.9 L9.2,12.13 L9.15,19.42 L5.82,19.42Z" fill="currentColor" stroke="none"/>',
   'sidebar': '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/>',
 } as const;
 
