@@ -135,7 +135,12 @@ export const useGatewayStore = defineStore('gateway', () => {
   }
 
   async function loadKeyPreview(): Promise<void> {
-    apiKeyPreview.value = await kiloApi.getApiKeyPreview();
+    try {
+      apiKeyPreview.value = await kiloApi.getApiKeyPreview();
+    } catch {
+      // A failed IPC read must not take the rest of startup down with it.
+      apiKeyPreview.value = null;
+    }
   }
 
   /** Validate and store a key. Returns an error message, or null on success. */

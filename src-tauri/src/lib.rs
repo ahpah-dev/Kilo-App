@@ -60,6 +60,7 @@ pub fn run() {
       commands::set_workspace,
       commands::execute_tool,
       commands::resolve_workspace_path,
+      commands::read_text_file,
     ])
     .run(tauri::generate_context!())
     .expect("error while building tauri application");

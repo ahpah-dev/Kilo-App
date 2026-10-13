@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import type { UiMessage } from '@/types';
 import { renderMarkdown, handleMarkdownClick, copyText } from '@/utils/markdown';
 import ToolCallCard from '@/components/ToolCallCard.vue';
@@ -11,9 +11,34 @@ const props = defineProps<{
   /** First assistant message of a turn: shows the avatar row. */
   showHeader?: boolean;
   canRetry?: boolean;
+  /** Editing rewrites history from this message, so it is only offered when idle. */
+  canEdit?: boolean;
 }>();
 
-const emit = defineEmits<{ retry: [] }>();
+const emit = defineEmits<{ retry: []; edit: [id: string, content: string] }>();
+
+const editing = ref(false);
+const draft = ref('');
+const editArea = ref<HTMLTextAreaElement | null>(null);
+
+async function beginEdit(): Promise<void> {
+  draft.value = props.message.content ?? '';
+  editing.value = true;
+  await nextTick();
+  editArea.value?.focus();
+  editArea.value?.select();
+}
+
+function cancelEdit(): void {
+  editing.value = false;
+}
+
+function submitEdit(): void {
+  const text = draft.value.trim();
+  if (!text) return;
+  editing.value = false;
+  emit('edit', props.message.id, text);
+}
 
 const isUser = computed(() => props.message.role === 'user');
 const content = computed(() => props.message.content ?? '');
@@ -40,13 +65,41 @@ const time = computed(() =>
 
 <template>
   <div v-if="isUser" class="msg user">
-    <div class="user-bubble">{{ content }}</div>
-    <div class="msg-actions user-actions">
-      <span class="time">{{ time }}</span>
-      <button class="icon-btn small" title="Copy" @click="copy">
-        <Icon :name="copied ? 'check' : 'copy'" :size="13" />
-      </button>
+    <div v-if="editing" class="edit-box">
+      <textarea
+        ref="editArea"
+        v-model="draft"
+        rows="2"
+        spellcheck="false"
+        @keydown.enter.exact.prevent="submitEdit"
+        @keydown.esc="cancelEdit"
+      ></textarea>
+      <div class="edit-actions">
+        <span class="edit-hint"><span class="kbd">Enter</span> resend · <span class="kbd">Esc</span> cancel</span>
+        <button class="btn btn-ghost btn-sm" @click="cancelEdit">Cancel</button>
+        <button class="btn btn-primary btn-sm" :disabled="!draft.trim()" @click="submitEdit">
+          <Icon name="send" :size="13" /> Resend
+        </button>
+      </div>
     </div>
+
+    <template v-else>
+      <div class="user-bubble">{{ content }}</div>
+      <div class="msg-actions user-actions">
+        <span class="time">{{ time }}</span>
+        <button
+          v-if="canEdit"
+          class="icon-btn small"
+          title="Edit and resend from here"
+          @click="beginEdit"
+        >
+          <Icon name="pencil" :size="13" />
+        </button>
+        <button class="icon-btn small" :title="copied ? 'Copied' : 'Copy'" @click="copy">
+          <Icon :name="copied ? 'check' : 'copy'" :size="13" />
+        </button>
+      </div>
+    </template>
   </div>
 
   <div v-else class="msg assistant" :class="{ continued: !showHeader }">
@@ -141,6 +194,50 @@ const time = computed(() =>
   overflow-wrap: anywhere;
   font-size: 14px;
   line-height: 1.6;
+}
+
+/* ===== Edit and resend ===== */
+
+.edit-box {
+  width: min(78%, 640px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--accent);
+  background: var(--surface-input);
+  box-shadow: 0 0 0 3px var(--accent-dim);
+}
+
+.edit-box textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--hairline);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.edit-box textarea:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-hint {
+  flex: 1;
+  font-size: 11.5px;
+  color: var(--text-tertiary);
 }
 
 .msg-actions {

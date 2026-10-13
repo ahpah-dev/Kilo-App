@@ -205,6 +205,24 @@ export interface Conversation {
   plan?: AgentPlan;
   /** Set when a run was cut short because the agent stopped making progress. */
   stalled?: boolean;
+  /** Pinned chats sort above everything else and are never archived. */
+  pinned?: boolean;
+  /** Archived chats are hidden from the main list unless you ask for them. */
+  archived?: boolean;
+}
+
+/** A full-text hit inside a conversation, with the text to show around it. */
+export interface SearchHit {
+  conversationId: string;
+  title: string;
+  messageId: string;
+  role: Role;
+  /** The matched text, clipped to a readable window. */
+  snippet: string;
+  /** Index of the match inside `snippet`, for highlighting. */
+  matchStart: number;
+  matchLength: number;
+  matchedAt: string;
 }
 
 export type TodoStatus = 'pending' | 'in_progress' | 'done';

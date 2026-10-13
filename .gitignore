@@ -16,6 +16,10 @@ tools/out/
 __pycache__/
 *.pyc
 *.log
+# Redirected here by test runs when the system temp dir is unavailable.
+.rust-tmp/
+# Agent presets kept in the working tree but unrelated to this project.
+dsh-presets/
 .DS_Store
 Thumbs.db
 

@@ -12,6 +12,12 @@ const routes = [
     meta: { title: 'Chat' },
   },
   {
+    path: '/search',
+    name: 'search',
+    component: () => import('@/views/SearchView.vue'),
+    meta: { title: 'Search' },
+  },
+  {
     path: '/models',
     name: 'models',
     component: () => import('@/views/ModelsView.vue'),

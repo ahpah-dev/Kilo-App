@@ -847,15 +847,16 @@ mod tests {
         let name = std::sync::Mutex::new(String::new());
         let cancelled = client
             .chat_completion_stream(request, Arc::new(CancelToken::default()), |event| {
-                if let StreamEvent::Chunk(value) = event {
-                    if let Some(calls) = value["choices"][0]["delta"]["tool_calls"].as_array() {
-                        for call in calls {
-                            if let Some(n) = call["function"]["name"].as_str() {
-                                *name.lock().unwrap() = format!("{}{n}", name.lock().unwrap());
-                            }
-                            if let Some(args) = call["function"]["arguments"].as_str() {
-                                collected.lock().unwrap().push_str(args);
-                            }
+                let StreamEvent::Chunk(value) = event else {
+                    return;
+                };
+                if let Some(calls) = value["choices"][0]["delta"]["tool_calls"].as_array() {
+                    for call in calls {
+                        if let Some(n) = call["function"]["name"].as_str() {
+                            *name.lock().unwrap() = format!("{}{n}", name.lock().unwrap());
+                        }
+                        if let Some(args) = call["function"]["arguments"].as_str() {
+                            collected.lock().unwrap().push_str(args);
                         }
                     }
                 }

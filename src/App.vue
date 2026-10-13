@@ -1,19 +1,24 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import AppSidebar from '@/components/AppSidebar.vue';
 import TitleBar from '@/components/TitleBar.vue';
 import Icon from '@/components/Icon.vue';
+import CommandPalette, { type PaletteCommand } from '@/components/CommandPalette.vue';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
+import { THEME_OPTIONS } from '@/types';
 
 const route = useRoute();
 const router = useRouter();
 const gateway = useGatewayStore();
 const chat = useChatStore();
 
+const paletteOpen = ref(false);
+
 const viewTitle = computed(() => {
   if (route.name === 'chat') return chat.activeConversation?.title ?? 'New chat';
+  if (route.name === 'search') return 'Search';
   if (route.name === 'models') return 'Models';
   if (route.name === 'settings') return 'Settings';
   return '';
@@ -21,9 +26,100 @@ const viewTitle = computed(() => {
 
 const offline = computed(() => gateway.isInitialized && !gateway.isConnected && !gateway.isLoading);
 
+/** Actions offered by the command palette, alongside live chat results. */
+const commands = computed<PaletteCommand[]>(() => {
+  const list: PaletteCommand[] = [
+    {
+      id: 'new-chat',
+      label: 'New chat',
+      hint: 'Ctrl N',
+      icon: 'plus',
+      group: 'Actions',
+      keywords: 'start create',
+      run: () => {
+        chat.startNewChat();
+        void router.push('/chat');
+      },
+    },
+    {
+      id: 'open-folder',
+      label: gateway.workspace ? 'Change workspace folder' : 'Open workspace folder',
+      icon: 'folder-open',
+      group: 'Actions',
+      keywords: 'workspace project directory',
+      run: () => void gateway.pickWorkspace(),
+    },
+    {
+      id: 'search',
+      label: 'Search all conversations',
+      hint: 'Ctrl Shift F',
+      icon: 'search',
+      group: 'Actions',
+      keywords: 'find full text',
+      run: () => void router.push('/search'),
+    },
+    {
+      id: 'toggle-mode',
+      label: `Switch to ${gateway.mode === 'agent' ? 'Plan' : 'Agent'} mode`,
+      icon: gateway.mode === 'agent' ? 'list' : 'bolt',
+      group: 'Actions',
+      keywords: 'agent plan chat mode',
+      run: () => {
+        gateway.mode = gateway.mode === 'agent' ? 'plan' : 'agent';
+        void router.push('/chat');
+      },
+    },
+  ];
+
+  // Changing theme is a common reason to reach for a palette.
+  for (const theme of THEME_OPTIONS) {
+    if (theme.value === gateway.theme) continue;
+    list.push({
+      id: `theme-${theme.value}`,
+      label: `Theme: ${theme.label}`,
+      icon: 'sun',
+      group: 'Appearance',
+      keywords: 'colour color appearance',
+      run: () => gateway.setTheme(theme.value),
+    });
+  }
+
+  list.push(
+    {
+      id: 'go-models',
+      label: 'Browse models',
+      icon: 'cube',
+      group: 'Go to',
+      run: () => void router.push('/models'),
+    },
+    {
+      id: 'go-settings',
+      label: 'Open settings',
+      hint: 'Ctrl ,',
+      icon: 'settings',
+      group: 'Go to',
+      run: () => void router.push('/settings'),
+    }
+  );
+
+  return list;
+});
+
+function openConversation(id: string): void {
+  chat.selectConversation(id);
+  void router.push('/chat');
+}
+
 function onKeydown(e: KeyboardEvent): void {
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && !e.shiftKey && e.key.toLowerCase() === 'n') {
+
+  if (mod && e.key.toLowerCase() === 'k') {
+    e.preventDefault();
+    paletteOpen.value = !paletteOpen.value;
+  } else if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    void router.push('/search');
+  } else if (mod && !e.shiftKey && e.key.toLowerCase() === 'n') {
     e.preventDefault();
     chat.startNewChat();
     if (route.name !== 'chat') void router.push('/chat');
@@ -45,7 +141,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   <div class="app-shell">
     <TitleBar :title="viewTitle" />
     <div class="app-body">
-      <AppSidebar />
+      <AppSidebar @open-palette="paletteOpen = true" />
       <main class="main-panel">
         <transition name="fade">
           <div v-if="offline" class="offline-banner">
@@ -65,6 +161,13 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
         </router-view>
       </main>
     </div>
+
+    <CommandPalette
+      :open="paletteOpen"
+      :commands="commands"
+      @close="paletteOpen = false"
+      @open-conversation="openConversation"
+    />
   </div>
 </template>
 

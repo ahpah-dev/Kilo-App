@@ -79,6 +79,16 @@ async function send(text?: string): Promise<void> {
   scrollToBottom();
 }
 
+/** Rewrite history from an earlier message, then run the agent again. */
+async function editAndResend(messageId: string, content: string): Promise<void> {
+  const conversation = chat.activeConversation;
+  if (!conversation || chat.isRunning) return;
+  if (chat.truncateFrom(conversation.id, messageId) === null) return;
+  pinned.value = true;
+  void chat.sendMessage(content);
+  scrollToBottom();
+}
+
 function onKeydown(e: KeyboardEvent): void {
   if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
     e.preventDefault();
@@ -176,7 +186,9 @@ onBeforeUnmount(() => {
             :results="results"
             :show-header="message.role === 'assistant' && (i === 0 || visible[i - 1].role === 'user')"
             :can-retry="canRetry && message.id === lastMessage?.id"
+            :can-edit="message.role === 'user' && !chat.isRunning"
             @retry="chat.retry()"
+            @edit="editAndResend"
           />
           <div v-if="chat.isActiveRunning && !lastMessage?.streaming && !awaitingApproval" class="working">
             <span class="spinner"></span> Working…

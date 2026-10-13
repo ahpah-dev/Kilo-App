@@ -126,6 +126,11 @@ class KiloApiService {
   resolveWorkspacePath(path: string): Promise<string> {
     return invoke<string>('resolve_workspace_path', { path });
   }
+
+  /** Read a text file the user chose in a dialog (used by conversation import). */
+  readTextFile(path: string): Promise<string> {
+    return invoke<string>('read_text_file', { path });
+  }
 }
 
 export const kiloApi = new KiloApiService();

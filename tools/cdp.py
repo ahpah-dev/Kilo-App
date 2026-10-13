@@ -99,12 +99,19 @@ class WS:
         payload = await self.reader.readexactly(length) if length else b""
         return payload.decode("utf-8", "replace")
 
-    async def call(self, method: str, params: dict | None = None) -> dict:
+    async def call(self, method: str, params: dict | None = None, timeout: float = 15.0) -> dict:
         msg_id = self.next_id
         self.next_id += 1
         await self._send(json.dumps({"id": msg_id, "method": method, "params": params or {}}))
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
         while True:
-            raw = await self._read_frame()
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                # A navigation or reload can swallow the reply; callers that do
+                # not need one must not block forever.
+                raise TimeoutError(f"{method} did not answer within {timeout}s")
+            raw = await asyncio.wait_for(self._read_frame(), timeout=remaining)
             try:
                 msg = json.loads(raw)
             except json.JSONDecodeError:

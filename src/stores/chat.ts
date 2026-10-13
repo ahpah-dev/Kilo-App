@@ -5,6 +5,7 @@ import type {
   ChatCompletionChunk,
   ChatMessage,
   Conversation,
+  SearchHit,
   Todo,
   TodoStatus,
   Tool,
@@ -180,6 +181,12 @@ export const useChatStore = defineStore('chat', () => {
   /** The active conversation was cut short because the agent stopped progressing. */
   const stalled = computed(() => activeConversation.value?.stalled === true);
 
+  // Archive only ever hides chats; nothing is deleted by archiving.
+  const archivedConversations = computed(() => conversations.value.filter((c) => c.archived));
+  const archivedCount = computed(() => archivedConversations.value.length);
+  const activeConversations = computed(() => conversations.value.filter((c) => !c.archived));
+  const pinnedConversations = computed(() => activeConversations.value.filter((c) => c.pinned));
+
   /** Files touched by the agent in the active conversation, most recent first. */
   const changedFiles = computed(() => {
     const seen = new Set<string>();
@@ -246,6 +253,192 @@ export const useChatStore = defineStore('chat', () => {
 
   function startNewChat(): void {
     activeConversationId.value = null;
+  }
+
+  function setPinned(id: string, pinned: boolean): void {
+    const conv = findConversation(id);
+    if (!conv) return;
+    conv.pinned = pinned;
+    // Pinning something archived is contradictory; pinning wins.
+    if (pinned) conv.archived = false;
+    persist();
+  }
+
+  function setArchived(id: string, archived: boolean): void {
+    const conv = findConversation(id);
+    if (!conv) return;
+    conv.archived = archived;
+    if (archived) conv.pinned = false;
+    if (archived && activeConversationId.value === id) activeConversationId.value = null;
+    persist();
+  }
+
+  /** Copies a conversation, including its messages, as a new chat. */
+  function duplicateConversation(id: string): string | null {
+    const conv = findConversation(id);
+    if (!conv) return null;
+    const copy: Conversation = {
+      ...structuredClone(toRawConversation(conv)),
+      id: crypto.randomUUID(),
+      title: `${conv.title} (copy)`.slice(0, 80),
+      created_at: now(),
+      updated_at: now(),
+      pinned: false,
+      archived: false,
+    };
+    conversations.value.unshift(copy);
+    activeConversationId.value = copy.id;
+    persist();
+    return copy.id;
+  }
+
+  /** Plain, non-reactive copy so we never write a Vue proxy out as JSON. */
+  function toRawConversation(conv: Conversation): Conversation {
+    return JSON.parse(JSON.stringify(conv)) as Conversation;
+  }
+
+  /** Messages that carry meaning to a reader; internal tool rows are skipped. */
+  function exportableMessages(conv: Conversation): UiMessage[] {
+    return conv.messages.filter((m) => m.role === 'user' || m.role === 'assistant');
+  }
+
+  function toMarkdown(conv: Conversation): string {
+    const lines: string[] = [`# ${conv.title}`, ''];
+    lines.push(`- Model: \`${conv.model}\``);
+    lines.push(`- Created: ${conv.created_at}`);
+    lines.push(`- Messages: ${exportableMessages(conv).length}`);
+    if (conv.todos?.length) {
+      lines.push('', '## Task list', '');
+      for (const todo of conv.todos) {
+        const mark = todo.status === 'done' ? 'x' : todo.status === 'in_progress' ? '~' : ' ';
+        lines.push(`- [${mark}] ${todo.title}`);
+      }
+    }
+    if (conv.plan) {
+      lines.push('', '## Plan', '', conv.plan.summary);
+      if (conv.plan.changes.length) {
+        lines.push('', ...conv.plan.changes.map((c) => `- ${c}`));
+      }
+    }
+    lines.push('', '---', '');
+    for (const message of exportableMessages(conv)) {
+      lines.push(`### ${message.role === 'user' ? 'You' : 'Kilo'}`, '', message.content ?? '', '');
+    }
+    return lines.join('\n');
+  }
+
+  /** JSON shaped so `importConversation` can read it straight back. */
+  function toExportJson(conv: Conversation): string {
+    return JSON.stringify(
+      {
+        format: 'kilo-app-conversation',
+        version: 1,
+        exported_at: now(),
+        conversation: toRawConversation(conv),
+      },
+      null,
+      2
+    );
+  }
+
+  /** Read a file produced by `toExportJson`; anything else is rejected. */
+  function importConversation(text: string): string | null {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return null;
+    }
+    if (!parsed || typeof parsed !== 'object') return null;
+    const payload = parsed as { format?: unknown; conversation?: unknown };
+    if (payload.format !== 'kilo-app-conversation') return null;
+    const incoming = payload.conversation as Conversation | undefined;
+    if (!incoming || typeof incoming.title !== 'string' || !Array.isArray(incoming.messages)) {
+      return null;
+    }
+
+    const conv: Conversation = {
+      ...incoming,
+      // A fresh id avoids clobbering an existing chat with the same id.
+      id: crypto.randomUUID(),
+      created_at: incoming.created_at || now(),
+      updated_at: now(),
+      pinned: false,
+      archived: false,
+    };
+    conversations.value.unshift(conv);
+    activeConversationId.value = conv.id;
+    persist();
+    return conv.id;
+  }
+
+  /** Remove `messageId` and everything after it, so it can be sent again. */
+  function truncateFrom(conversationId: string, messageId: string): string | null {
+    const conv = findConversation(conversationId);
+    if (!conv || run.value) return null;
+    const index = conv.messages.findIndex((m) => m.id === messageId);
+    if (index === -1) return null;
+    const [removed] = conv.messages.splice(index, 1);
+    conv.messages.splice(index);
+    conv.todos = undefined;
+    conv.plan = undefined;
+    conv.stalled = false;
+    persist();
+    return removed?.content ?? null;
+  }
+
+  /** Full-text search across every conversation. */
+  function search(rawQuery: string, limit = 60): SearchHit[] {
+    const query = rawQuery.trim().toLowerCase();
+    if (query.length < 2) return [];
+    const hits: SearchHit[] = [];
+
+    for (const conv of conversations.value) {
+      if (conv.archived) continue;
+      for (const message of conv.messages) {
+        const text = message.content ?? '';
+        if (!text) continue;
+        const at = text.toLowerCase().indexOf(query);
+        if (at === -1) continue;
+
+        // Clip a window around the match so the snippet stays readable.
+        const before = 46;
+        const after = 90;
+        const start = Math.max(0, at - before);
+        const end = Math.min(text.length, at + query.length + after);
+        const snippet =
+          (start > 0 ? '…' : '') +
+          text.slice(start, end).replace(/\s+/g, ' ') +
+          (end < text.length ? '…' : '');
+        const matchStart = Math.max(0, at - start) + (start > 0 ? 1 : 0);
+
+        hits.push({
+          conversationId: conv.id,
+          title: conv.title,
+          messageId: message.id,
+          role: message.role,
+          snippet,
+          matchStart,
+          matchLength: query.length,
+          matchedAt: message.created_at,
+        });
+        if (hits.length >= limit) return hits;
+      }
+      // Titles are worth matching too, even when no message contains the term.
+      if (conv.title.toLowerCase().includes(query) && !hits.some((h) => h.conversationId === conv.id)) {
+        hits.push({
+          conversationId: conv.id,
+          title: conv.title,
+          messageId: '',
+          role: 'user',
+          snippet: conv.title,
+          matchStart: Math.max(0, conv.title.toLowerCase().indexOf(query)),
+          matchLength: query.length,
+          matchedAt: conv.updated_at,
+        });
+      }
+    }
+    return hits;
   }
 
   function selectConversation(id: string): void {
@@ -632,12 +825,24 @@ export const useChatStore = defineStore('chat', () => {
     isActiveRunning,
     stalled,
     changedFiles,
+    pinnedConversations,
+    activeConversations,
+    archivedConversations,
+    archivedCount,
     createConversation,
     startNewChat,
     selectConversation,
     deleteConversation,
     renameConversation,
     clearAll,
+    setPinned,
+    setArchived,
+    duplicateConversation,
+    toMarkdown,
+    toExportJson,
+    importConversation,
+    truncateFrom,
+    search,
     sendMessage,
     retry,
     stop,

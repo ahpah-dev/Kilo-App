@@ -203,6 +203,26 @@ pub async fn execute_tool(
     Ok(output)
 }
 
+/// Read a UTF-8 text file the user picked in a file dialog.
+///
+/// Deliberately narrow: the path comes from the OS picker and only text below a
+/// fixed ceiling is returned, so this is an import helper rather than a general
+/// file-read primitive.
+#[command]
+pub fn read_text_file(path: String) -> Result<String, String> {
+    const MAX_BYTES: u64 = 8 * 1024 * 1024;
+
+    let file = std::path::PathBuf::from(&path);
+    let meta = std::fs::metadata(&file).map_err(|e| format!("Cannot open that file: {e}"))?;
+    if !meta.is_file() {
+        return Err("That path is not a file".to_string());
+    }
+    if meta.len() > MAX_BYTES {
+        return Err("That file is too large to read.".to_string());
+    }
+    std::fs::read_to_string(&file).map_err(|e| format!("Cannot read that file: {e}"))
+}
+
 /// Absolute path for a workspace-relative path (used to reveal files).
 #[command]
 pub fn resolve_workspace_path(config: State<'_, Arc<ConfigStore>>, path: String) -> Result<String, String> {
