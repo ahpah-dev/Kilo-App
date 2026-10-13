@@ -33,7 +33,7 @@ WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts in
 
 ## Install
 
-1. Download `Kilo App_1.0.1_x64-setup.exe` from the [latest release](../../releases/latest).
+1. Download the installer from the [latest release](../../releases/latest).
    It installs per-user, so **no administrator rights are required**.
 2. Launch Kilo — it connects to the Kilo Gateway on the free tier straight away.
 3. Click **Open folder** to choose a workspace, then describe the change you want.
