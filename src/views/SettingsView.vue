@@ -304,7 +304,7 @@ function clampSteps(e: Event): void {
         </div>
       </section>
 
-      <p class="about">Kilo App 1.0.1 · Native client for the Kilo Gateway</p>
+      <p class="about">Kilo App 1.0.2 · Native client for the Kilo Gateway</p>
     </div>
   </div>
 </template>

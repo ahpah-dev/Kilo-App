@@ -77,8 +77,13 @@ const time = computed(() =>
         v-html="html"
       ></div>
 
-      <div v-if="thinkingLive && !message.reasoning" class="typing">
+      <div v-if="thinkingLive && !message.reasoning && !message.retryIn" class="typing">
         <span></span><span></span><span></span>
+      </div>
+
+      <div v-if="message.retryIn" class="retry-notice">
+        <Icon name="refresh" :size="13" />
+        <span>Kilo Gateway rate limit hit &mdash; retrying in {{ message.retryIn }}s&hellip;</span>
       </div>
 
       <div v-if="toolCalls.length" class="tool-list">
@@ -286,6 +291,24 @@ const time = computed(() =>
 
 .typing span:nth-child(3) {
   animation-delay: 0.4s;
+}
+
+/* Waiting out a gateway rate limit before the next attempt. */
+.retry-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  color: var(--warning);
+  font-size: 12.5px;
+}
+
+.retry-notice .icon {
+  animation: spin 1.6s linear infinite;
 }
 
 .tool-list {

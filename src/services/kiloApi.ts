@@ -38,11 +38,16 @@ class KiloApiService {
     return invoke<ChatCompletionResponse>('chat_completion', { request });
   }
 
-  /** Stream a completion; resolves when the backend sends its terminal event. */
+  /**
+   * Stream a completion; resolves when the backend sends its terminal event.
+   * `onRetry` fires when the gateway rate limits us and the backend is about to
+   * wait `retryAfter` seconds before trying again.
+   */
   streamChatCompletion(
     requestId: string,
     request: ChatCompletionRequest,
-    onChunk: (chunk: ChatCompletionChunk) => void
+    onChunk: (chunk: ChatCompletionChunk) => void,
+    onRetry?: (retryAfter: number) => void
   ): Promise<StreamOutcome> {
     return new Promise((resolve, reject) => {
       const channel = new Channel<StreamEvent>();
@@ -50,6 +55,9 @@ class KiloApiService {
         switch (message.event) {
           case 'chunk':
             onChunk(message.data);
+            break;
+          case 'rateLimitedRetry':
+            onRetry?.(message.data.retryAfter);
             break;
           case 'done':
             resolve('done');

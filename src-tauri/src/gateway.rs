@@ -1,5 +1,6 @@
 use crate::config::ConfigStore;
 use crate::models::*;
+use chrono::DateTime;
 use futures_util::StreamExt;
 use reqwest::{
     Client, ClientBuilder,
@@ -37,6 +38,12 @@ const REQUEST_TIMEOUT: Duration = Duration::from_secs(120);
 /// Free models can sit in a queue for a while before the first token.
 const STREAM_READ_TIMEOUT: Duration = Duration::from_secs(300);
 
+/// Waits used when the gateway rate limits a request (HTTP 429): the first
+/// retry waits 10s, and if it is *still* rate limited the next one waits 20s.
+/// A longer `Retry-After` from the gateway always wins.
+const RATE_LIMIT_BACKOFF: [Duration; 2] =
+    [Duration::from_secs(10), Duration::from_secs(20)];
+
 #[derive(Deserialize)]
 struct GatewayModelsResponse {
     data: Vec<GatewayModel>,
@@ -51,6 +58,11 @@ pub struct KiloGatewayClient {
 
 impl KiloGatewayClient {
     pub fn new(config: Arc<ConfigStore>) -> Self {
+        Self::with_gateway_url(config, KILO_GATEWAY_BASE_URL.to_string())
+    }
+
+    /// Same client pointed at another gateway base URL. Used by tests.
+    pub fn with_gateway_url(config: Arc<ConfigStore>, gateway_url: String) -> Self {
         let client = ClientBuilder::new()
             .connect_timeout(Duration::from_secs(20))
             .read_timeout(STREAM_READ_TIMEOUT)
@@ -59,7 +71,7 @@ impl KiloGatewayClient {
 
         Self {
             client,
-            gateway_url: KILO_GATEWAY_BASE_URL.to_string(),
+            gateway_url,
             config,
         }
     }
@@ -94,7 +106,10 @@ impl KiloGatewayClient {
     fn build_headers(api_key: Option<&str>) -> HeaderMap {
         let mut headers = HeaderMap::new();
         headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        headers.insert("X-KiloCode-Version", HeaderValue::from_static("kilo-app/1.0.1"));
+        headers.insert(
+            "X-KiloCode-Version",
+            HeaderValue::from_static(concat!("kilo-app/", env!("CARGO_PKG_VERSION"))),
+        );
         headers.insert("HTTP-Referer", HeaderValue::from_static("https://kilo.ai"));
         headers.insert("X-Title", HeaderValue::from_static("Kilo App"));
 
@@ -196,24 +211,68 @@ impl KiloGatewayClient {
 
     /// Streamed chat completion. Every SSE `data:` payload is forwarded through
     /// `emit` as a raw JSON chunk; returns `Ok(true)` when cancelled.
+    ///
+    /// The initial request is retried on HTTP 429 using `RATE_LIMIT_BACKOFF`.
+    /// Only an *unstarted* response is retried: once SSE chunks have been
+    /// forwarded, replaying the request would duplicate the reply, so a
+    /// mid-stream 429 is surfaced to the caller instead.
     pub async fn chat_completion_stream(
+        &self,
+        request: ChatCompletionRequest,
+        cancel: Arc<CancelToken>,
+        emit: impl Fn(StreamEvent),
+    ) -> Result<bool> {
+        self.stream_with_backoff(request, cancel, &RATE_LIMIT_BACKOFF, emit)
+            .await
+    }
+
+    /// `chat_completion_stream` with an injectable backoff schedule, so tests can
+    /// exercise the retry path without waiting for the real 10s/20s delays.
+    async fn stream_with_backoff(
         &self,
         mut request: ChatCompletionRequest,
         cancel: Arc<CancelToken>,
+        backoff: &[Duration],
         emit: impl Fn(StreamEvent),
     ) -> Result<bool> {
         request.stream = Some(true);
 
-        let send = self
-            .client
-            .post(format!("{}/chat/completions", self.gateway_url))
-            .headers(self.headers())
-            .json(&request)
-            .send();
+        let mut attempt = 0usize;
+        let response = loop {
+            let send = self
+                .client
+                .post(format!("{}/chat/completions", self.gateway_url))
+                .headers(self.headers())
+                .json(&request)
+                .send();
 
-        let response = tokio::select! {
-            r = send => r?,
-            _ = cancel.cancelled() => return Ok(true),
+            let response = tokio::select! {
+                r = send => r?,
+                _ = cancel.cancelled() => return Ok(true),
+            };
+
+            // Out of retries: let the caller translate the status into an error.
+            if response.status().as_u16() != 429 || attempt >= backoff.len() {
+                break response;
+            }
+
+            // `Retry-After` is advisory; never wait less than the backoff step.
+            let requested = retry_after_seconds(response.headers());
+            let delay = requested
+                .map(|secs| Duration::from_secs(secs).max(backoff[attempt]))
+                .unwrap_or(backoff[attempt]);
+            attempt += 1;
+
+            emit(StreamEvent::RateLimitedRetry { retry_after: delay.as_secs() });
+            log::warn!(
+                "rate limited by the Kilo Gateway (attempt {attempt}); retrying in {}s",
+                delay.as_secs()
+            );
+
+            tokio::select! {
+                _ = tokio::time::sleep(delay) => {}
+                _ = cancel.cancelled() => return Ok(true),
+            }
         };
 
         if !response.status().is_success() {
@@ -329,12 +388,7 @@ impl KiloGatewayClient {
 
     async fn handle_error_response(response: reqwest::Response) -> GatewayError {
         let status = response.status();
-        let retry_after = response
-            .headers()
-            .get("retry-after")
-            .and_then(|h| h.to_str().ok())
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(60);
+        let retry_after = retry_after_seconds(response.headers()).unwrap_or(60);
         let text = response.text().await.unwrap_or_default();
 
         let error_msg = if let Ok(api_error) = serde_json::from_str::<ApiErrorResponse>(&text) {
@@ -364,11 +418,25 @@ impl KiloGatewayClient {
     }
 }
 
+/// Parse a `Retry-After` header. Both forms allowed by RFC 9110 are handled:
+/// a delay in seconds, and an HTTP-date. Returns `None` when absent or unclear.
+fn retry_after_seconds(headers: &HeaderMap) -> Option<u64> {
+    let raw = headers.get("retry-after")?.to_str().ok()?.trim().to_string();
+    if raw.is_empty() {
+        return None;
+    }
+    if let Ok(secs) = raw.parse::<u64>() {
+        return Some(secs);
+    }
+    let when = DateTime::parse_from_rfc2822(&raw).ok()?;
+    let delta = when.with_timezone(&chrono::Utc) - chrono::Utc::now();
+    Some(delta.num_seconds().clamp(0, 3600) as u64)
+}
+
 enum SseLine {
     Chunk(serde_json::Value),
     Done,
-    Ignore,
-}
+    Ignore,}
 
 /// Parse one SSE line. Comment lines (`: KILO PROCESSING` keep-alives) and
 /// blank separators are ignored; an in-band `{"error": ...}` payload fails.
@@ -415,9 +483,272 @@ fn count_providers(text: &str) -> u32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
 
     fn client() -> KiloGatewayClient {
         KiloGatewayClient::new(Arc::new(ConfigStore::in_memory()))
+    }
+
+    /// Start a one-shot HTTP server that answers with the scripted responses in
+    /// order (the last one repeats) and records how many requests it received.
+    /// Returns (base_url, request_count).
+    async fn scripted_gateway(
+        responses: Vec<String>,
+    ) -> (String, Arc<Mutex<Vec<usize>>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let hits = Arc::new(Mutex::new(Vec::new()));
+        let recorder = hits.clone();
+
+        tokio::spawn(async move {
+            let mut index = 0usize;
+            loop {
+                let Ok((mut socket, _)) = listener.accept().await else {
+                    return;
+                };
+                // Read the request head (and body) so the client's write completes.
+                let mut buf = vec![0u8; 8192];
+                let _ = socket.read(&mut buf).await;
+                recorder.lock().unwrap().push(index + 1);
+
+                let body = responses[index.min(responses.len() - 1)].clone();
+                index += 1;
+                let _ = socket.write_all(body.as_bytes()).await;
+                let _ = socket.flush().await;
+            }
+        });
+
+        (format!("http://{addr}"), hits)
+    }
+
+    /// A 429 carrying a JSON error body and an optional `Retry-After`.
+    fn rate_limited(retry_after: Option<&str>) -> String {
+        let body = r#"{"error":{"message":"Rate limit exceeded","code":429}}"#;
+        let extra = retry_after
+            .map(|s| format!("Retry-After: {s}\r\n"))
+            .unwrap_or_default();
+        format!(
+            "HTTP/1.1 429 Too Many Requests\r\nContent-Type: application/json\r\nContent-Length: {}\r\n{extra}Connection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    /// A successful SSE completion carrying a single content chunk.
+    fn sse_ok() -> String {
+        let body = concat!(
+            "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"hello\"},\"finish_reason\":null}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    fn quick_backoff() -> Vec<Duration> {
+        vec![Duration::from_millis(20), Duration::from_millis(40)]
+    }
+
+    fn test_client(url: &str) -> KiloGatewayClient {
+        KiloGatewayClient::with_gateway_url(Arc::new(ConfigStore::in_memory()), url.to_string())
+    }
+
+    fn stream_request() -> ChatCompletionRequest {
+        serde_json::from_value(serde_json::json!({
+            "model": "kilo-auto/free",
+            "messages": [{"role": "user", "content": "hi"}]
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn retries_twice_on_rate_limit_then_succeeds() {
+        let (url, hits) = scripted_gateway(vec![
+            rate_limited(None),
+            rate_limited(None),
+            sse_ok(),
+        ])
+        .await;
+        let client = test_client(&url);
+        let chunks = Mutex::new(0usize);
+        let retries = Mutex::new(Vec::new());
+
+        let cancelled = client
+            .stream_with_backoff(stream_request(), Arc::new(CancelToken::default()), &quick_backoff(), |event| {
+                match event {
+                    StreamEvent::Chunk(_) => *chunks.lock().unwrap() += 1,
+                    StreamEvent::RateLimitedRetry { retry_after } => {
+                        retries.lock().unwrap().push(retry_after)
+                    }
+                    _ => {}
+                }
+            })
+            .await
+            .expect("stream should recover after the retries");
+
+        assert!(!cancelled);
+        assert_eq!(*chunks.lock().unwrap(), 1, "the recovered stream should deliver its chunk");
+        assert_eq!(
+            hits.lock().unwrap().len(),
+            3,
+            "expected two retries after the initial 429"
+        );
+        // The real schedule is 10s then 20s; asserted with the fast test values.
+        assert_eq!(*retries.lock().unwrap(), vec![0, 0], "one retry event per attempt");
+    }
+
+    #[tokio::test]
+    async fn gives_up_after_the_backoff_schedule_is_exhausted() {
+        let (url, hits) = scripted_gateway(vec![rate_limited(None), rate_limited(None), rate_limited(None)]).await;
+        let client = test_client(&url);
+        let retries = Mutex::new(0usize);
+
+        let err = client
+            .stream_with_backoff(stream_request(), Arc::new(CancelToken::default()), &quick_backoff(), |event| {
+                if matches!(event, StreamEvent::RateLimitedRetry { .. }) {
+                    *retries.lock().unwrap() += 1;
+                }
+            })
+            .await
+            .expect_err("a permanently rate limited gateway must surface an error");
+
+        assert!(
+            matches!(err, GatewayError::RateLimited { .. }),
+            "expected RateLimited, got {err:?}"
+        );
+        assert_eq!(*retries.lock().unwrap(), 2, "exactly two retries");
+        assert_eq!(*hits.lock().unwrap(), vec![1, 2, 3], "initial request plus two retries");
+    }
+
+    #[tokio::test]
+    async fn a_longer_retry_after_header_wins_over_the_default_backoff() {
+        // 2s is far longer than the 20ms test backoff but still quick to run;
+        // the wire value is trusted as-is, so this also proves it is not clamped.
+        let (url, hits) = scripted_gateway(vec![rate_limited(Some("2")), sse_ok()]).await;
+        let client = test_client(&url);
+        let seen = Mutex::new(Vec::new());
+
+        let started = std::time::Instant::now();
+        client
+            .stream_with_backoff(stream_request(), Arc::new(CancelToken::default()), &quick_backoff(), |event| {
+                if let StreamEvent::RateLimitedRetry { retry_after } = event {
+                    seen.lock().unwrap().push(retry_after)
+                }
+            })
+            .await
+            .expect("should succeed after honouring Retry-After");
+        let waited = started.elapsed();
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![2],
+            "Retry-After: 2 must override the 20ms test backoff"
+        );
+        assert!(
+            waited >= Duration::from_millis(1900),
+            "the client must actually wait for Retry-After, waited {waited:?}"
+        );
+        assert_eq!(*hits.lock().unwrap(), vec![1, 2]);
+    }
+
+    #[tokio::test]
+    async fn a_shorter_retry_after_does_not_undercut_the_backoff() {
+        let (url, _hits) = scripted_gateway(vec![rate_limited(Some("1")), sse_ok()]).await;
+        let client = test_client(&url);
+        let seen = Mutex::new(Vec::new());
+
+        client
+            .stream_with_backoff(
+                stream_request(),
+                Arc::new(CancelToken::default()),
+                &[Duration::from_secs(10)],
+                |event| {
+                    if let StreamEvent::RateLimitedRetry { retry_after } = event {
+                        seen.lock().unwrap().push(retry_after)
+                    }
+                },
+            )
+            .await
+            .expect("should succeed");
+
+        assert_eq!(
+            *seen.lock().unwrap(),
+            vec![10],
+            "a Retry-After shorter than the backoff step must not shorten the wait"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelling_during_the_backoff_stops_the_retry() {
+        let (url, hits) = scripted_gateway(vec![rate_limited(None), sse_ok()]).await;
+        let client = test_client(&url);
+        let cancel = Arc::new(CancelToken::default());
+        let canceller = cancel.clone();
+
+        // Cancel while the client is sleeping between attempts.
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(10)).await;
+            canceller.cancel();
+        });
+
+        let cancelled = client
+            .stream_with_backoff(stream_request(), cancel, &[Duration::from_secs(30)], |_| {})
+            .await
+            .expect("cancellation is not an error");
+
+        assert!(cancelled, "cancelling during the wait must report a cancelled run");
+        assert_eq!(
+            hits.lock().unwrap().len(),
+            1,
+            "no second request should be sent once cancelled"
+        );
+    }
+
+    #[test]
+    fn retry_after_accepts_seconds_and_http_dates() {
+        let mut h = HeaderMap::new();
+        assert_eq!(retry_after_seconds(&h), None, "absent header");
+
+        h.insert("retry-after", HeaderValue::from_static("30"));
+        assert_eq!(retry_after_seconds(&h), Some(30));
+
+        h.insert("retry-after", HeaderValue::from_static("  7 "));
+        assert_eq!(retry_after_seconds(&h), Some(7), "surrounding whitespace");
+
+        h.insert("retry-after", HeaderValue::from_static("nonsense"));
+        assert_eq!(retry_after_seconds(&h), None, "unparseable value");
+
+        let future = (chrono::Utc::now() + chrono::Duration::seconds(45)).to_rfc2822();
+        h.insert("retry-after", HeaderValue::from_str(&future).unwrap());
+        let parsed = retry_after_seconds(&h).expect("HTTP-date form should parse");
+        assert!((40..=45).contains(&parsed), "expected ~45s, got {parsed}");
+
+        let past = (chrono::Utc::now() - chrono::Duration::seconds(60)).to_rfc2822();
+        h.insert("retry-after", HeaderValue::from_str(&past).unwrap());
+        assert_eq!(retry_after_seconds(&h), Some(0), "a past date means retry now");
+    }
+
+    #[test]
+    fn default_backoff_is_ten_then_twenty_seconds() {
+        assert_eq!(
+            RATE_LIMIT_BACKOFF,
+            [Duration::from_secs(10), Duration::from_secs(20)]
+        );
+    }
+
+    #[test]
+    fn version_header_tracks_the_crate_version() {
+        // Guards against the header drifting from Cargo.toml on a version bump.
+        let headers = KiloGatewayClient::build_headers(None);
+        let value = headers
+            .get("X-KiloCode-Version")
+            .expect("X-KiloCode-Version is always sent")
+            .to_str()
+            .unwrap();
+        assert_eq!(value, concat!("kilo-app/", env!("CARGO_PKG_VERSION")));
+        assert!(value.starts_with("kilo-app/"));
     }
 
     #[test]

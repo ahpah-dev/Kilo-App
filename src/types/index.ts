@@ -21,6 +21,8 @@ export interface UiMessage extends ChatMessage {
   usage?: Usage;
   toolState?: ToolState;
   changedPath?: string;
+  /** Seconds the backend is waiting before retrying a rate-limited request. */
+  retryIn?: number;
   created_at: string;
 }
 
@@ -56,7 +58,9 @@ export type StreamEvent =
   | { event: 'chunk'; data: ChatCompletionChunk }
   | { event: 'done' }
   | { event: 'cancelled' }
-  | { event: 'error'; data: string };
+  | { event: 'error'; data: string }
+  /** The gateway rate limited us; the backend is waiting before retrying. */
+  | { event: 'rateLimitedRetry'; data: { retryAfter: number } };
 
 export interface ChatCompletionRequest {
   model: string;

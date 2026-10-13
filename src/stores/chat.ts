@@ -302,13 +302,18 @@ export const useChatStore = defineStore('chat', () => {
               temperature: settings.temperature,
               ...(toolsEnabled ? { tools: AGENT_TOOLS, tool_choice: 'auto' as const } : {}),
             },
-            (chunk) => applyChunk(assistant, chunk)
+            (chunk) => applyChunk(assistant, chunk),
+            // The backend waits out a gateway rate limit; tell the user why.
+            (retryAfter) => {
+              assistant.retryIn = retryAfter;
+            }
           );
           if (outcome === 'cancelled') current.aborted = true;
         } catch (e) {
           assistant.error = errorMessage(e, 'The request failed');
         } finally {
           assistant.streaming = false;
+          assistant.retryIn = undefined;
           current.currentOpId = null;
           if (assistant.tool_calls) {
             assistant.tool_calls = assistant.tool_calls.filter((c) => c && c.function.name);

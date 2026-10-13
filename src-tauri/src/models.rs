@@ -358,6 +358,9 @@ pub enum StreamEvent {
   Done,
   Cancelled,
   Error(String),
+  /// The gateway rate limited the request; the client is waiting
+  /// `retry_after` seconds before sending it again.
+  RateLimitedRetry { retry_after: u64 },
 }
 
 /// Settings persisted to the app config directory.
