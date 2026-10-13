@@ -128,4 +128,4 @@ to its own terms.
 
 ## License
 
-[MIT](LICENSE)
+[Unlicense](LICENSE) — released into the public domain.
