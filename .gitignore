@@ -6,8 +6,9 @@ src-tauri/gen/schemas/
 # Dependencies
 node_modules/
 
-# Installers produced by `npm run tauri build`
+# Installers produced by `npm run tauri build` (published as release assets)
 *.exe
+*.exe.sha256
 
 # Local development / tooling scratch
 .dsh-*
