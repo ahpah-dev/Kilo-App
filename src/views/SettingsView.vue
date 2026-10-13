@@ -3,7 +3,7 @@ import { ref } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
-import { THEME_OPTIONS, DEFAULT_AGENT_SETTINGS } from '@/types';
+import { THEME_OPTIONS, UI_MODE_OPTIONS, DEFAULT_AGENT_SETTINGS } from '@/types';
 import ModelSelector from '@/components/ModelSelector.vue';
 import Icon from '@/components/Icon.vue';
 
@@ -224,24 +224,65 @@ function clampSteps(e: Event): void {
           <span class="card-icon"><Icon name="sun" /></span>
           <div>
             <h2>Appearance</h2>
-            <p>Choose a color theme.</p>
+            <p>Pick a colour theme and decide how the interface is drawn.</p>
           </div>
         </div>
-        <div class="themes">
-          <button
-            v-for="t in THEME_OPTIONS"
-            :key="t.value"
-            class="theme"
-            :class="{ active: gateway.theme === t.value }"
-            @click="gateway.setTheme(t.value)"
-          >
-            <span class="swatch" :style="{ background: t.bg }">
-              <span class="swatch-line" :style="{ background: t.text }"></span>
-              <span class="swatch-line short" :style="{ background: t.text }"></span>
-              <span class="swatch-accent" :style="{ background: t.accent }"></span>
-            </span>
-            <span class="theme-label">{{ t.label }}</span>
-          </button>
+
+        <div class="setting-block">
+          <div class="setting-label">
+            <span>Colour theme</span>
+            <span class="setting-count">{{ THEME_OPTIONS.length }} themes</span>
+          </div>
+          <div class="themes">
+            <button
+              v-for="t in THEME_OPTIONS"
+              :key="t.value"
+              class="theme"
+              :class="{ active: gateway.theme === t.value }"
+              :title="t.label"
+              :aria-label="`Theme: ${t.label}`"
+              :aria-pressed="gateway.theme === t.value"
+              @click="gateway.setTheme(t.value)"
+            >
+              <span class="swatch" :style="{ background: t.bg }">
+                <span class="swatch-rail" :style="{ background: t.accent }"></span>
+                <span class="swatch-line" :style="{ background: t.text }"></span>
+                <span class="swatch-line short" :style="{ background: t.text }"></span>
+                <span class="swatch-accent" :style="{ background: t.accent }"></span>
+              </span>
+              <span class="theme-label">{{ t.label }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="setting-block">
+          <div class="setting-label">
+            <span>Interface mode</span>
+            <span class="setting-count">applies to every theme</span>
+          </div>
+          <div class="modes">
+            <button
+              v-for="m in UI_MODE_OPTIONS"
+              :key="m.value"
+              class="mode"
+              :class="{ active: gateway.uiMode === m.value }"
+              :aria-label="`Mode: ${m.label}`"
+              :aria-pressed="gateway.uiMode === m.value"
+              @click="gateway.setUiMode(m.value)"
+            >
+              <span class="mode-preview" :class="`preview-${m.value}`">
+                <span class="pv-side"></span>
+                <span class="pv-body">
+                  <span class="pv-line"></span>
+                  <span class="pv-line short"></span>
+                </span>
+              </span>
+              <span class="mode-text">
+                <span class="mode-name">{{ m.label }}</span>
+                <span class="mode-desc">{{ m.description }}</span>
+              </span>
+            </button>
+          </div>
         </div>
       </section>
 
@@ -304,7 +345,7 @@ function clampSteps(e: Event): void {
         </div>
       </section>
 
-      <p class="about">Kilo App 1.0.3 · Native client for the Kilo Gateway</p>
+      <p class="about">Kilo App 1.0.4 · Native client for the Kilo Gateway</p>
     </div>
   </div>
 </template>
@@ -339,8 +380,10 @@ function clampSteps(e: Event): void {
 .card {
   padding: 18px 20px 8px;
   border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  border: 1px solid var(--hairline);
+  background: var(--surface-card);
+  backdrop-filter: blur(var(--blur-panel)) saturate(1.35);
+  box-shadow: var(--shadow-pop);
 }
 
 .card-head {
@@ -416,7 +459,7 @@ label.row {
 
 .model-control :deep(.trigger) {
   border: 1px solid var(--border);
-  background: var(--bg-primary);
+  background: var(--surface-input);
 }
 
 .model-control :deep(.popover) {
@@ -443,7 +486,7 @@ label.row {
   font-size: 12.5px;
   padding: 5px 10px;
   border-radius: var(--radius-sm);
-  background: var(--bg-primary);
+  background: var(--surface-input);
   border: 1px solid var(--border);
 }
 
@@ -571,12 +614,35 @@ label.row {
 
 /* ===== Themes ===== */
 
+.setting-block {
+  padding: 14px 0 6px;
+  border-top: 1px solid var(--hairline);
+}
+
+.setting-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.setting-label > span:first-child {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-count {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+}
+
 .themes {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 10px;
-  padding: 12px 0;
-  border-top: 1px solid var(--border);
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: 9px;
+  padding-bottom: 6px;
 }
 
 .theme {
@@ -585,61 +651,212 @@ label.row {
   gap: 6px;
   padding: 6px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-primary);
+  border: 1px solid var(--hairline);
+  background: var(--surface-input);
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
 }
 
 .theme:hover {
   border-color: var(--border-light);
+  transform: translateY(-1px);
 }
 
 .theme.active {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-dim);
+  box-shadow: 0 0 0 2px var(--accent-dim), var(--shadow-pop);
 }
 
 .swatch {
   position: relative;
-  height: 46px;
-  border-radius: 4px;
-  padding: 9px 10px;
+  height: 52px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  padding: 10px 9px 10px 16px;
   display: flex;
   flex-direction: column;
   gap: 5px;
   overflow: hidden;
 }
 
+/* A slim accent rail, so a theme reads as a window rather than a flat chip. */
+.swatch-rail {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 5px;
+  opacity: 0.9;
+}
+
 .swatch-line {
   height: 4px;
-  width: 70%;
+  width: 72%;
   border-radius: 2px;
-  opacity: 0.75;
+  opacity: 0.8;
 }
 
 .swatch-line.short {
-  width: 45%;
-  opacity: 0.4;
+  width: 46%;
+  opacity: 0.42;
 }
 
 .swatch-accent {
   position: absolute;
   right: 8px;
   bottom: 8px;
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   border-radius: 50%;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor 18%, transparent);
 }
 
 .theme-label {
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
   color: var(--text-secondary);
   text-align: left;
   padding: 0 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .theme.active .theme-label {
   color: var(--text-primary);
+}
+
+/* ===== Interface modes ===== */
+
+.modes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  padding-bottom: 8px;
+}
+
+.mode {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline);
+  background: var(--surface-input);
+  text-align: left;
+  transition: border-color var(--transition), box-shadow var(--transition), transform var(--transition);
+}
+
+.mode:hover {
+  border-color: var(--border-light);
+  transform: translateY(-1px);
+}
+
+.mode.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-dim), var(--shadow-pop);
+}
+
+/* Miniature of the layout each mode produces. */
+.mode-preview {
+  flex-shrink: 0;
+  width: 52px;
+  height: 40px;
+  border-radius: 5px;
+  display: flex;
+  overflow: hidden;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+}
+
+.pv-side {
+  width: 15px;
+  background: var(--bg-tertiary);
+}
+
+.pv-body {
+  flex: 1;
+  padding: 7px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pv-line {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border-light);
+}
+
+.pv-line.short {
+  width: 58%;
+  opacity: 0.65;
+}
+
+/* Polished: soft depth. */
+.preview-polished .pv-side {
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+.preview-polished .pv-body {
+  background: var(--bg-secondary);
+}
+
+/* Glass: translucent with a highlight sweep. */
+.preview-glass {
+  background: linear-gradient(
+    140deg,
+    color-mix(in srgb, var(--accent) 20%, var(--bg-tertiary)),
+    color-mix(in srgb, var(--bg-secondary) 80%, transparent)
+  );
+}
+
+.preview-glass .pv-side {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: inset -1px 0 0 color-mix(in srgb, white 20%, transparent);
+}
+
+.preview-glass .pv-body {
+  background: color-mix(in srgb, white 7%, transparent);
+}
+
+.preview-glass .pv-line {
+  background: color-mix(in srgb, white 38%, transparent);
+}
+
+/* Clean: flat, hairline only. */
+.preview-clean {
+  border-radius: 3px;
+}
+
+.preview-clean .pv-side {
+  background: transparent;
+  box-shadow: inset -1px 0 0 var(--border);
+}
+
+.preview-clean .pv-body {
+  background: transparent;
+}
+
+.preview-clean .pv-line {
+  background: var(--border);
+}
+
+.mode-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mode-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.mode-desc {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-tertiary);
 }
 
 /* ===== Stats ===== */
@@ -657,7 +874,7 @@ label.row {
   gap: 2px;
   padding: 10px 12px;
   border-radius: var(--radius-sm);
-  background: var(--bg-primary);
+  background: var(--surface-input);
   border: 1px solid var(--border);
 }
 

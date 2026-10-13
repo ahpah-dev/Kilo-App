@@ -362,13 +362,13 @@ onBeforeUnmount(() => {
   padding: 14px;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  background: var(--surface-card);
   text-align: left;
 }
 
 .suggestion:hover {
   border-color: var(--accent);
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
 }
 
 .s-icon {
@@ -428,10 +428,10 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   border: 1px solid var(--border-light);
   color: var(--text-secondary);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-pop);
   z-index: 5;
 }
 
@@ -458,7 +458,7 @@ onBeforeUnmount(() => {
   gap: 10px;
   padding: 6px 10px;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-card);
   border: 1px solid var(--border);
   font-size: 12px;
   min-width: 0;
@@ -484,7 +484,7 @@ onBeforeUnmount(() => {
   height: 22px;
   padding: 0 8px;
   border-radius: 11px;
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-secondary);
@@ -514,8 +514,8 @@ onBeforeUnmount(() => {
 .composer {
   border: 1px solid var(--border-light);
   border-radius: 14px;
-  background: var(--bg-tertiary);
-  box-shadow: var(--shadow-md);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-pop);
   transition: border-color var(--transition), box-shadow var(--transition);
 }
 
@@ -552,8 +552,8 @@ textarea::placeholder {
   display: inline-flex;
   padding: 2px;
   border-radius: 8px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
+  background: var(--surface-input);
+  border: 1px solid var(--hairline);
   flex-shrink: 0;
 }
 
@@ -637,7 +637,7 @@ textarea::placeholder {
 }
 
 .send:disabled {
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   color: var(--text-tertiary);
 }
 

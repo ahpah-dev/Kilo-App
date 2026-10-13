@@ -201,16 +201,42 @@ export interface Conversation {
   updated_at: string;
 }
 
-export type Theme = 'light' | 'dark' | 'system' | 'yellow' | 'blue' | 'green' | 'purple' | 'rose';
+export type Theme =
+  | 'system'
+  | 'light'
+  | 'dark'
+  | 'midnight'
+  | 'nord'
+  | 'slate'
+  | 'yellow'
+  | 'blue'
+  | 'green'
+  | 'purple'
+  | 'rose'
+  | 'sunset'
+  | 'forest';
+
+/** How the interface is drawn, independently of the colour theme. */
+export type UiMode = 'polished' | 'glass' | 'clean';
 
 export interface ThemeOption {
   value: Theme;
   label: string;
+  /** `bg`/`text`/`accent` drive the live swatch preview in Settings. */
   bg: string;
   text: string;
   accent: string;
+  /** Used to group light and dark themes in the picker. */
+  appearance: 'dark' | 'light';
 }
 
+export interface UiModeOption {
+  value: UiMode;
+  label: string;
+  description: string;
+}
+
+/** Themes are grouped dark-first; `system` follows the OS. */
 export const THEME_OPTIONS: ThemeOption[] = [
   {
     value: 'system',
@@ -218,48 +244,87 @@ export const THEME_OPTIONS: ThemeOption[] = [
     bg: '#0a0a0f',
     text: '#f0f0f5',
     accent: '#6366f1',
+    appearance: 'dark',
   },
   {
     value: 'light',
-    label: 'Light',
+    label: 'Daylight',
     bg: '#f8fafc',
     text: '#0f172a',
     accent: '#4f46e5',
+    appearance: 'light',
   },
   {
     value: 'dark',
-    label: 'Dark',
+    label: 'Graphite',
     bg: '#0a0a0f',
     text: '#f0f0f5',
     accent: '#6366f1',
+    appearance: 'dark',
+  },
+  {
+    value: 'midnight',
+    label: 'Midnight',
+    bg: '#070b16',
+    text: '#e6ecff',
+    accent: '#60a5fa',
+    appearance: 'dark',
+  },
+  {
+    value: 'nord',
+    label: 'Nord',
+    bg: '#242933',
+    text: '#eceff4',
+    accent: '#88c0d0',
+    appearance: 'dark',
+  },
+  {
+    value: 'slate',
+    label: 'Slate',
+    bg: '#14181f',
+    text: '#e9edf2',
+    accent: '#94a3b8',
+    appearance: 'dark',
   },
   {
     value: 'yellow',
-    label: 'Yellow',
+    label: 'Amber',
     bg: '#1a1600',
     text: '#fffbeb',
     accent: '#fde047',
+    appearance: 'dark',
   },
   {
     value: 'blue',
-    label: 'Blue',
+    label: 'Ocean',
     bg: '#06101f',
     text: '#e0efff',
     accent: '#38bdf8',
+    appearance: 'dark',
   },
   {
     value: 'green',
-    label: 'Green',
+    label: 'Emerald',
     bg: '#05140a',
     text: '#e8ffe8',
     accent: '#4ade80',
+    appearance: 'dark',
+  },
+  {
+    value: 'forest',
+    label: 'Forest',
+    bg: '#0d1410',
+    text: '#e6efe8',
+    accent: '#6ee7b7',
+    appearance: 'dark',
   },
   {
     value: 'purple',
-    label: 'Purple',
+    label: 'Violet',
     bg: '#0f061a',
     text: '#f5e8ff',
     accent: '#c084fc',
+    appearance: 'dark',
   },
   {
     value: 'rose',
@@ -267,8 +332,37 @@ export const THEME_OPTIONS: ThemeOption[] = [
     bg: '#1a050a',
     text: '#ffe8ec',
     accent: '#fb7185',
+    appearance: 'dark',
   },
-]
+  {
+    value: 'sunset',
+    label: 'Sunset',
+    bg: '#1a0f0a',
+    text: '#ffeee2',
+    accent: '#fb923c',
+    appearance: 'dark',
+  },
+];
+
+export const UI_MODE_OPTIONS: UiModeOption[] = [
+  {
+    value: 'polished',
+    label: 'Polished',
+    description: 'Layered surfaces, soft shadows and a subtle sheen. The default.',
+  },
+  {
+    value: 'glass',
+    label: 'Glass',
+    description: 'Translucent panels with gradient edge highlights and blurred depth.',
+  },
+  {
+    value: 'clean',
+    label: 'Clean',
+    description: 'Flat, crisp and minimal — hairline borders, no shadows, tighter corners.',
+  },
+];
+
+export const DEFAULT_UI_MODE: UiMode = 'polished';
 
 /** Free models on the Kilo Gateway (tagged `:free`). */
 export const KILOCODE_FREE_MODELS = [

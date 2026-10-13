@@ -241,7 +241,7 @@ function reveal(event: MouseEvent): void {
 .tool-card {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-card);
   overflow: hidden;
   animation: slideUp 160ms ease;
 }
@@ -280,7 +280,7 @@ function reveal(event: MouseEvent): void {
   width: 22px;
   height: 22px;
   border-radius: 5px;
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   color: var(--text-secondary);
   flex-shrink: 0;
 }

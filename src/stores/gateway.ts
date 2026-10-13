@@ -1,11 +1,19 @@
 import { defineStore } from 'pinia';
 import { ref, computed, watch } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
-import type { AgentSettings, ApiKeyStatus, ChatMode, GatewayStatus, ModelInfo, Theme } from '@/types';
-import { DEFAULT_AGENT_SETTINGS, DEFAULT_MODEL, KILO_GATEWAY_BASE_URL, THEME_OPTIONS } from '@/types';
+import type { AgentSettings, ApiKeyStatus, ChatMode, GatewayStatus, ModelInfo, Theme, UiMode } from '@/types';
+import {
+  DEFAULT_AGENT_SETTINGS,
+  DEFAULT_MODEL,
+  DEFAULT_UI_MODE,
+  KILO_GATEWAY_BASE_URL,
+  THEME_OPTIONS,
+  UI_MODE_OPTIONS,
+} from '@/types';
 import { kiloApi, errorMessage } from '@/services/kiloApi';
 
 const THEME_KEY = 'kilo-app-theme';
+const UI_MODE_KEY = 'kilo-app-ui-mode';
 const MODE_KEY = 'kilo-app-mode';
 const AGENT_KEY = 'kilo-app-agent-settings';
 
@@ -15,12 +23,22 @@ function getInitialTheme(): Theme {
   return 'system';
 }
 
+function getInitialUiMode(): UiMode {
+  const stored = localStorage.getItem(UI_MODE_KEY) as UiMode | null;
+  if (stored && UI_MODE_OPTIONS.some((m) => m.value === stored)) return stored;
+  return DEFAULT_UI_MODE;
+}
+
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
 function applyTheme(theme: Theme): void {
   const resolved = theme === 'system' ? (darkQuery.matches ? 'dark' : 'light') : theme;
   document.documentElement.setAttribute('data-theme', resolved);
   document.documentElement.style.colorScheme = resolved === 'light' ? 'light' : 'dark';
+}
+
+function applyUiMode(mode: UiMode): void {
+  document.documentElement.setAttribute('data-ui-mode', mode);
 }
 
 function loadAgentSettings(): AgentSettings {
@@ -45,11 +63,13 @@ export const useGatewayStore = defineStore('gateway', () => {
   const isConnected = ref(false);
   const isInitialized = ref(false);
   const theme = ref<Theme>(getInitialTheme());
+  const uiMode = ref<UiMode>(getInitialUiMode());
   const workspace = ref<string | null>(null);
   const mode = ref<ChatMode>((localStorage.getItem(MODE_KEY) as ChatMode) || 'agent');
   const agentSettings = ref<AgentSettings>(loadAgentSettings());
 
   applyTheme(theme.value);
+  applyUiMode(uiMode.value);
   darkQuery.addEventListener('change', () => {
     if (theme.value === 'system') applyTheme('system');
   });
@@ -57,6 +77,10 @@ export const useGatewayStore = defineStore('gateway', () => {
   watch(theme, (value) => {
     localStorage.setItem(THEME_KEY, value);
     applyTheme(value);
+  });
+  watch(uiMode, (value) => {
+    localStorage.setItem(UI_MODE_KEY, value);
+    applyUiMode(value);
   });
   watch(mode, (value) => localStorage.setItem(MODE_KEY, value));
   watch(agentSettings, (value) => localStorage.setItem(AGENT_KEY, JSON.stringify(value)), { deep: true });
@@ -190,6 +214,10 @@ export const useGatewayStore = defineStore('gateway', () => {
     theme.value = newTheme;
   }
 
+  function setUiMode(newMode: UiMode): void {
+    uiMode.value = newMode;
+  }
+
   return {
     models,
     freeModels,
@@ -209,6 +237,7 @@ export const useGatewayStore = defineStore('gateway', () => {
     isInitialized,
     tierLabel,
     theme,
+    uiMode,
     workspace,
     workspaceName,
     mode,
@@ -223,5 +252,6 @@ export const useGatewayStore = defineStore('gateway', () => {
     pickWorkspace,
     refresh,
     setTheme,
+    setUiMode,
   };
 });

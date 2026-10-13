@@ -176,7 +176,8 @@ const navItems = [
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
+  background: var(--surface-sidebar);
+  backdrop-filter: blur(var(--blur-panel)) saturate(1.4);
   border-right: 1px solid var(--border);
   min-height: 0;
 }
@@ -196,7 +197,7 @@ const navItems = [
   padding: 0 10px 0 12px;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border);
-  background: var(--bg-tertiary);
+  background: var(--surface-raised);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
@@ -209,7 +210,7 @@ const navItems = [
 
 .new-chat:hover {
   border-color: var(--accent);
-  background: var(--bg-elevated);
+  background: var(--surface-card);
 }
 
 .filter {
@@ -219,7 +220,7 @@ const navItems = [
   height: 30px;
   padding: 0 10px;
   border-radius: var(--radius-sm);
-  background: var(--bg-tertiary);
+  background: var(--surface-raised);
   color: var(--text-tertiary);
 }
 
@@ -296,7 +297,7 @@ const navItems = [
   height: 24px;
   padding: 0 6px;
   border-radius: 4px;
-  background: var(--bg-primary);
+  background: var(--surface-input);
   border: 1px solid var(--accent);
   font-size: 13px;
 }
@@ -319,7 +320,7 @@ const navItems = [
 }
 
 .conv-delete:hover {
-  background: var(--bg-elevated);
+  background: var(--surface-card);
   color: var(--error);
 }
 

@@ -27,8 +27,9 @@ WebView2 rather than a bundled browser, so the whole app is ~17 MB and starts in
   and clearly marked. No account is needed to start chatting.
 - **Optional API key** — add a Kilo API key for higher limits. It is validated against the
   gateway and stored locally.
-- **Eight themes** — dark, light, system and six colour themes, with matching syntax
-  highlighting.
+- **13 themes and 3 interface modes** — pick any colour theme, then render it **Polished**
+  (layered surfaces and soft depth), **Glass** (translucent panels with blurred depth) or
+  **Clean** (flat, hairline borders, minimal). All with matching syntax highlighting.
 - **Local history** — conversations are stored on your machine and survive restarts.
 
 ## Install

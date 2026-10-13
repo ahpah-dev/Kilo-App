@@ -185,10 +185,11 @@ onBeforeUnmount(() => document.removeEventListener('mousedown', onDocumentClick)
   max-width: calc(100vw - 40px);
   display: flex;
   flex-direction: column;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-light);
+  background: var(--surface-float);
+  backdrop-filter: blur(var(--blur-float)) saturate(1.5);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-float);
   overflow: hidden;
 }
 

@@ -40,6 +40,26 @@
   --font-mono: 'Cascadia Code', 'Cascadia Mono', 'JetBrains Mono', Consolas, 'SF Mono', Menlo, monospace;
   --titlebar-height: 38px;
   --sidebar-width: 264px;
+
+  /* ===== Presentation tokens =====
+     Set by the UI-mode blocks below ([data-ui-mode=...]) and consumed by
+     component styles. Keeping them separate from the colour palette means a
+     theme only ever declares colours, and a mode only ever declares how those
+     colours are presented. */
+  --surface-sidebar: var(--bg-primary);
+  --surface-titlebar: var(--bg-primary);
+  --surface-panel: var(--bg-secondary);
+  --surface-card: var(--bg-tertiary);
+  --surface-raised: var(--bg-elevated);
+  --surface-float: var(--bg-elevated);
+  --surface-input: var(--bg-primary);
+  --blur-panel: 0px;
+  --blur-float: 0px;
+  --highlight: transparent;
+  --hairline: transparent;
+  --sheen: transparent;
+  --shadow-pop: var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
 }
 
 [data-theme="light"] {
@@ -201,6 +221,231 @@
   box-sizing: border-box;
 }
 
+/* ===== Additional themes (1.0.4) =====================================
+   Each theme only declares palette colours; how they are presented comes
+   from the [data-ui-mode] blocks below. */
+
+[data-theme="midnight"] {
+  --bg-primary: #070b16;
+  --bg-secondary: #0c1322;
+  --bg-tertiary: #131c30;
+  --bg-elevated: #1a2440;
+  --bg-hover: #223054;
+  --surface: #0c1322;
+  --border: #1e2c4a;
+  --border-light: #2b3d63;
+  --text-primary: #e6ecff;
+  --text-secondary: #8fa6d8;
+  --text-tertiary: #5f7196;
+  --accent: #60a5fa;
+  --accent-hover: #93c5fd;
+  --accent-dim: rgba(96, 165, 250, 0.15);
+  --accent-glow: rgba(96, 165, 250, 0.32);
+  --accent-contrast: #070b16;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #fb7185;
+  --info: #818cf8;
+  --code-bg: rgba(3, 6, 14, 0.5);
+  --hl-keyword: #a5b4fc;
+  --hl-string: #86efac;
+  --hl-number: #fdba74;
+  --hl-comment: #52618a;
+  --hl-function: #7dd3fc;
+  --hl-type: #fcd34d;
+  --hl-attr: #67e8f9;
+}
+
+[data-theme="nord"] {
+  --bg-primary: #242933;
+  --bg-secondary: #2e3440;
+  --bg-tertiary: #3b4252;
+  --bg-elevated: #434c5e;
+  --bg-hover: #4c566a;
+  --surface: #2e3440;
+  --border: #434c5e;
+  --border-light: #4c566a;
+  --text-primary: #eceff4;
+  --text-secondary: #d8dee9;
+  --text-tertiary: #9aa5b8;
+  --accent: #88c0d0;
+  --accent-hover: #8fbcbb;
+  --accent-dim: rgba(136, 192, 208, 0.18);
+  --accent-glow: rgba(136, 192, 208, 0.3);
+  --accent-contrast: #242933;
+  --success: #a3be8c;
+  --warning: #ebcb8b;
+  --error: #bf616a;
+  --info: #81a1c1;
+  --code-bg: rgba(20, 24, 31, 0.5);
+  --hl-keyword: #81a1c1;
+  --hl-string: #a3be8c;
+  --hl-number: #b48ead;
+  --hl-comment: #7b88a1;
+  --hl-function: #88c0d0;
+  --hl-type: #ebcb8b;
+  --hl-attr: #8fbcbb;
+}
+
+[data-theme="slate"] {
+  --bg-primary: #14181f;
+  --bg-secondary: #1a1f28;
+  --bg-tertiary: #222832;
+  --bg-elevated: #2b323d;
+  --bg-hover: #353d4a;
+  --surface: #1a1f28;
+  --border: #2c333f;
+  --border-light: #3d4553;
+  --text-primary: #e9edf2;
+  --text-secondary: #a8b2c1;
+  --text-tertiary: #6f7b8b;
+  --accent: #94a3b8;
+  --accent-hover: #cbd5e1;
+  --accent-dim: rgba(148, 163, 184, 0.16);
+  --accent-glow: rgba(148, 163, 184, 0.28);
+  --accent-contrast: #14181f;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --info: #7dd3fc;
+  --code-bg: rgba(8, 11, 16, 0.45);
+  --hl-keyword: #cbd5e1;
+  --hl-string: #a7f3d0;
+  --hl-number: #fcd34d;
+  --hl-comment: #64748b;
+  --hl-function: #93c5fd;
+  --hl-type: #fde68a;
+  --hl-attr: #a5f3fc;
+}
+
+[data-theme="forest"] {
+  --bg-primary: #0d1410;
+  --bg-secondary: #121b16;
+  --bg-tertiary: #1a2620;
+  --bg-elevated: #22322a;
+  --bg-hover: #2c4136;
+  --surface: #121b16;
+  --border: #24382e;
+  --border-light: #34503f;
+  --text-primary: #e6efe8;
+  --text-secondary: #9dbcaa;
+  --text-tertiary: #6b8a78;
+  --accent: #6ee7b7;
+  --accent-hover: #a7f3d0;
+  --accent-dim: rgba(110, 231, 183, 0.14);
+  --accent-glow: rgba(110, 231, 183, 0.3);
+  --accent-contrast: #0d1410;
+  --success: #4ade80;
+  --warning: #fcd34d;
+  --error: #fb7185;
+  --info: #7dd3fc;
+  --code-bg: rgba(5, 10, 7, 0.45);
+  --hl-keyword: #a7f3d0;
+  --hl-string: #bef264;
+  --hl-number: #fdba74;
+  --hl-comment: #5f7a69;
+  --hl-function: #7dd3fc;
+  --hl-type: #fde68a;
+  --hl-attr: #99f6e4;
+}
+
+[data-theme="sunset"] {
+  --bg-primary: #1a0f0a;
+  --bg-secondary: #22150e;
+  --bg-tertiary: #2f1d13;
+  --bg-elevated: #3d2618;
+  --bg-hover: #4d3120;
+  --surface: #22150e;
+  --border: #452a1a;
+  --border-light: #5c3823;
+  --text-primary: #ffeee2;
+  --text-secondary: #e0a882;
+  --text-tertiary: #a87a5c;
+  --accent: #fb923c;
+  --accent-hover: #fdba74;
+  --accent-dim: rgba(251, 146, 60, 0.15);
+  --accent-glow: rgba(251, 146, 60, 0.32);
+  --accent-contrast: #1a0f0a;
+  --success: #4ade80;
+  --warning: #fcd34d;
+  --error: #f87171;
+  --info: #7dd3fc;
+  --code-bg: rgba(10, 5, 3, 0.45);
+  --hl-keyword: #fdba74;
+  --hl-string: #bef264;
+  --hl-number: #fca5a5;
+  --hl-comment: #8a6a55;
+  --hl-function: #7dd3fc;
+  --hl-type: #fde68a;
+  --hl-attr: #99f6e4;
+}
+
+/* ===== UI modes ======================================================
+   A mode reshapes how the palette is presented — surfaces, blur, edges and
+   depth — without touching any colour. Every surface token layers a
+   translucent tint over the theme's own background, so one rule set works
+   for all 13 themes and for both light and dark. */
+
+/* Polished (default): layered surfaces, soft depth, gentle radii. */
+[data-ui-mode="polished"] {
+  --surface-sidebar: color-mix(in srgb, var(--bg-primary) 82%, var(--bg-secondary));
+  --surface-titlebar: color-mix(in srgb, var(--bg-primary) 74%, var(--bg-secondary));
+  --surface-panel: var(--bg-secondary);
+  --surface-card: color-mix(in srgb, var(--bg-tertiary) 88%, var(--bg-secondary));
+  --surface-raised: color-mix(in srgb, var(--bg-elevated) 92%, var(--bg-hover));
+  --surface-float: var(--bg-elevated);
+  --surface-input: color-mix(in srgb, var(--bg-primary) 55%, var(--bg-secondary));
+  --highlight: color-mix(in srgb, var(--accent-hover) 22%, transparent);
+  --hairline: color-mix(in srgb, var(--border) 70%, transparent);
+  --sheen: color-mix(in srgb, var(--accent) 5%, transparent);
+  --radius-sm: 7px;
+  --radius-md: 11px;
+  --radius-lg: 16px;
+  --shadow-pop: 0 2px 6px rgba(0, 0, 0, 0.16), 0 10px 28px -12px rgba(0, 0, 0, 0.32);
+  --shadow-float: 0 8px 22px -8px rgba(0, 0, 0, 0.34), 0 24px 60px -24px rgba(0, 0, 0, 0.5);
+}
+
+/* Glass: translucent panels with gradient edge highlights and blurred depth. */
+[data-ui-mode="glass"] {
+  --surface-sidebar: color-mix(in srgb, var(--bg-secondary) 72%, transparent);
+  --surface-titlebar: color-mix(in srgb, var(--bg-secondary) 62%, transparent);
+  --surface-panel: color-mix(in srgb, var(--bg-secondary) 88%, transparent);
+  --surface-card: color-mix(in srgb, var(--bg-tertiary) 66%, transparent);
+  --surface-raised: color-mix(in srgb, var(--bg-elevated) 62%, transparent);
+  --surface-float: color-mix(in srgb, var(--bg-elevated) 84%, transparent);
+  --surface-input: color-mix(in srgb, var(--bg-primary) 42%, transparent);
+  --blur-panel: 22px;
+  --blur-float: 30px;
+  --highlight: color-mix(in srgb, var(--accent-hover) 40%, transparent);
+  --hairline: color-mix(in srgb, var(--border-light) 55%, transparent);
+  --sheen: color-mix(in srgb, var(--accent) 10%, transparent);
+  --radius-sm: 9px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --shadow-pop: 0 4px 14px -4px rgba(0, 0, 0, 0.4), 0 16px 40px -16px rgba(0, 0, 0, 0.55);
+  --shadow-float: 0 12px 34px -10px rgba(0, 0, 0, 0.5), 0 34px 80px -30px rgba(0, 0, 0, 0.7);
+}
+
+/* Clean: flat and crisp — opaque surfaces, hairline borders, no shadows. */
+[data-ui-mode="clean"] {
+  --surface-sidebar: var(--bg-primary);
+  --surface-titlebar: var(--bg-primary);
+  --surface-panel: var(--bg-primary);
+  --surface-card: var(--bg-primary);
+  --surface-raised: var(--bg-secondary);
+  --surface-float: var(--bg-secondary);
+  --surface-input: var(--bg-primary);
+  --highlight: transparent;
+  --hairline: color-mix(in srgb, var(--border) 45%, transparent);
+  --sheen: transparent;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --shadow-sm: none;
+  --shadow-pop: none;
+  --shadow-float: 0 6px 20px -8px rgba(0, 0, 0, 0.35);
+}
+
 html,
 body {
   height: 100%;
@@ -323,27 +568,40 @@ a:hover {
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 88%, white 12%),
+    var(--accent)
+  );
   color: var(--accent-contrast);
+  box-shadow: 0 1px 0 color-mix(in srgb, white 22%, transparent) inset,
+    0 1px 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--accent-hover);
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent-hover) 88%, white 12%),
+    var(--accent-hover)
+  );
 }
 
 .btn-primary:disabled {
   opacity: 0.45;
+  box-shadow: none;
 }
 
 .btn-secondary {
-  background: var(--bg-elevated);
-  border-color: var(--border);
+  background: var(--surface-raised);
+  border-color: var(--hairline);
   color: var(--text-primary);
+  backdrop-filter: blur(var(--blur-panel));
+  box-shadow: 0 1px 0 color-mix(in srgb, white 6%, transparent) inset;
 }
 
 .btn-secondary:hover:not(:disabled) {
   background: var(--bg-hover);
-  border-color: var(--border-light);
+  border-color: var(--highlight);
 }
 
 .btn-ghost {

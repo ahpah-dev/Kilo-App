@@ -74,6 +74,10 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
+  /* Glass mode needs a little depth behind the translucent chrome. */
+  background-image:
+    radial-gradient(1100px 420px at 12% -8%, var(--sheen), transparent 62%),
+    radial-gradient(900px 380px at 96% 4%, var(--sheen), transparent 58%);
 }
 
 .app-body {
@@ -88,7 +92,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  background: var(--bg-secondary);
+  background: var(--surface-panel);
 }
 
 .main-panel > :last-child {

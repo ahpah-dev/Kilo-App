@@ -139,7 +139,7 @@ function formatNumber(value: number): string {
 .refresh-btn {
   padding: 8px 16px;
   border-radius: var(--radius-sm);
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   border: 1px solid var(--border);
   color: var(--text-secondary);
   font-size: 13px;
@@ -214,7 +214,7 @@ function formatNumber(value: number): string {
 
 .model-card {
   padding: 18px;
-  background: var(--bg-tertiary);
+  background: var(--surface-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
@@ -226,7 +226,7 @@ function formatNumber(value: number): string {
 .model-card:hover {
   border-color: var(--border-light);
   transform: translateY(-2px);
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-pop);
 }
 
 .model-card.active {
@@ -283,7 +283,7 @@ function formatNumber(value: number): string {
   font-size: 11.5px;
   padding: 3px 8px;
   border-radius: 4px;
-  background: var(--bg-elevated);
+  background: var(--surface-raised);
   color: var(--text-secondary);
 }
 
@@ -348,7 +348,7 @@ function formatNumber(value: number): string {
 
 .skeleton-card {
   padding: 18px;
-  background: var(--bg-tertiary);
+  background: var(--surface-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   display: flex;
