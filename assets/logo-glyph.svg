@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-label="Kilo">
+  <title>Kilo</title>
+  <defs>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="3" y1="3" x2="22" y2="21">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#4338ca"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#g)" stroke-width="1.7"
+     stroke-linejoin="round" stroke-linecap="round">
+    <path d="M12 2 21 7 21 17 12 22 3 17 3 7Z"/>
+    <path d="M12 12 3 7M12 12l9-5M12 12v10"/>
+  </g>
+  <circle cx="12" cy="12" r="1.9" fill="url(#g)"/>
+</svg>

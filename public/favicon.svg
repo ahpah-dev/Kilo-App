@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Kilo App">
+  <title>Kilo App</title>
+  <defs>
+    <linearGradient id="brand" gradientUnits="userSpaceOnUse" x1="512" y1="512" x2="1582.7" y2="1169.7">
+      <stop offset="0" stop-color="#818cf8"/>
+      <stop offset="1" stop-color="#4338ca"/>
+    </linearGradient>
+    <clipPath id="squircle">
+      <rect width="1024" height="1024" rx="225"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#squircle)">
+    <rect width="1024" height="1024" fill="url(#brand)"/>
+    <ellipse cx="512" cy="-110" rx="800" ry="480" fill="#ffffff" opacity="0.12"/>
+  </g>
+  <g transform="translate(182 182) scale(27.5)"
+     fill="none" stroke="#ffffff" stroke-width="1.85"
+     stroke-linejoin="round" stroke-linecap="round">
+    <path d="M12 2 21 7 21 17 12 22 3 17 3 7Z"/>
+    <path d="M12 12 3 7M12 12l9-5M12 12v10"/>
+  </g>
+  <circle cx="512" cy="512" r="55" fill="#ffffff"/>
+</svg>

@@ -1,0 +1,23 @@
+# Build output
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+
+# Dependencies
+node_modules/
+
+# Installers produced by `npm run tauri build`
+*.exe
+
+# Local development / tooling scratch
+.dsh-*
+tools/out/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

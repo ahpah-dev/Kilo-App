@@ -1,0 +1,39 @@
+[package]
+name = "kilo-app"
+version = "1.0.1"
+description = "Kilo App - Native Windows client for Kilo Gateway"
+authors = ["Kilo Team"]
+license = "MIT"
+repository = "https://github.com/ahpah-dev/kilo-app"
+edition = "2024"
+rust-version = "1.90"
+categories = ["gui", "network-programming"]
+keywords = ["kilo", "ai", "gateway", "desktop"]
+
+[lib]
+name = "kilo_app_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.12.3", features = ["image-ico", "image-png"] }
+tauri-plugin-log = "2"
+tauri-plugin-http = "2"
+tauri-plugin-shell = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "stream"] }
+tokio = { version = "1.40", features = ["sync", "rt", "macros", "time", "process", "io-util"] }
+futures-util = "0.3"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "2.0"
+regex = "1"
+walkdir = "2"
+
+[dev-dependencies]
+tempfile = "3"
