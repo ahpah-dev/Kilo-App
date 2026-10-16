@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useGatewayStore } from '@/stores/gateway';
 import { useChatStore } from '@/stores/chat';
@@ -16,6 +16,20 @@ const connecting = ref(false);
 const keyError = ref<string | null>(null);
 const replacing = ref(false);
 const confirmClear = ref(false);
+const gatewayUrl = ref('');
+const urlError = ref<string | null>(null);
+
+onMounted(() => {
+  gatewayUrl.value = gateway.gatewayUrl;
+});
+
+async function saveGatewayUrl(): Promise<void> {
+  const error = await gateway.setGatewayUrl(gatewayUrl.value);
+  urlError.value = error;
+  if (!error) {
+    gatewayUrl.value = gateway.gatewayUrl;
+  }
+}
 
 const DOCS_URL = 'https://kilo.ai/docs/gateway/api-reference';
 const KEY_URL = 'https://kilo.ai/docs/gateway/authentication';
@@ -316,7 +330,28 @@ function clampSteps(e: Event): void {
         <div class="row">
           <div class="row-info">
             <span class="row-label">Endpoint</span>
-            <code class="row-desc mono">{{ gateway.gatewayUrl }}</code>
+            <span class="row-desc">OpenAI-compatible base URL used for every request.</span>
+          </div>
+          <div class="row-control">
+            <div class="input-wrap" :class="{ error: urlError }">
+              <input
+                v-model="gatewayUrl"
+                class="text-input"
+                placeholder="https://api.kilo.ai/api/gateway"
+                @blur="saveGatewayUrl"
+                @keydown.enter="saveGatewayUrl"
+              />
+              <button class="btn btn-ghost btn-sm" @click="saveGatewayUrl">
+                <Icon name="check" :size="13" />
+              </button>
+            </div>
+            <p v-if="urlError" class="field-hint error">{{ urlError }}</p>
+          </div>
+        </div>
+        <div class="row">
+          <div class="row-info">
+            <span class="row-label"></span>
+            <span class="row-desc">Changes apply to the next request. Restore the default by leaving the field empty.</span>
           </div>
           <div class="row-control">
             <button class="btn btn-ghost btn-sm" @click="gateway.refresh()"><Icon name="refresh" :size="13" /> Refresh</button>

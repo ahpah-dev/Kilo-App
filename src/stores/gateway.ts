@@ -203,16 +203,29 @@ export const useGatewayStore = defineStore('gateway', () => {
 
   async function refresh(): Promise<void> {
     isInitialized.value = true;
-    const [model, ws] = await Promise.all([
+    const [model, ws, url] = await Promise.all([
       kiloApi.getDefaultModel().catch(() => DEFAULT_MODEL),
       kiloApi.getWorkspace().catch(() => null),
+      kiloApi.getGatewayUrl().catch(() => KILO_GATEWAY_BASE_URL),
       loadKeyPreview().catch(() => undefined),
     ]);
     defaultModel.value = model;
     workspace.value = ws;
+    gatewayUrl.value = url;
     await fetchModels();
     void fetchStatus();
     void checkApiKeyStatus();
+  }
+
+  async function setGatewayUrl(url: string): Promise<string | null> {
+    try {
+      await kiloApi.setGatewayUrl(url.trim());
+      gatewayUrl.value = url.trim() || KILO_GATEWAY_BASE_URL;
+      void fetchStatus();
+      return null;
+    } catch (e) {
+      return errorMessage(e, 'Could not set gateway URL');
+    }
   }
 
   function setTheme(newTheme: Theme): void {
@@ -258,5 +271,6 @@ export const useGatewayStore = defineStore('gateway', () => {
     refresh,
     setTheme,
     setUiMode,
+    setGatewayUrl,
   };
 });

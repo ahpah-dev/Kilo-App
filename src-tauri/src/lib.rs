@@ -49,6 +49,8 @@ pub fn run() {
       commands::cancel_operation,
       commands::get_gateway_status,
       commands::get_available_models,
+      commands::get_gateway_url,
+      commands::set_gateway_url,
       commands::set_api_key,
       commands::get_api_key_status,
       commands::get_api_key_preview,

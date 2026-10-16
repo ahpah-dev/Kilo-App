@@ -17,6 +17,45 @@ const scroller = ref<HTMLElement | null>(null);
 const content = ref<HTMLElement | null>(null);
 const pinned = ref(true);
 let resizeObserver: ResizeObserver | null = null;
+let draftTimer: number | undefined;
+
+const DRAFT_PREFIX = 'kilo-app-draft-';
+
+const draftKey = computed(() => (chat.activeConversationId ? `${DRAFT_PREFIX}${chat.activeConversationId}` : null));
+
+/** Persist the composer draft so it survives a reload or navigating away. */
+function saveDraft(): void {
+  if (!draftKey.value) return;
+  try {
+    localStorage.setItem(draftKey.value, input.value);
+  } catch {
+    // localStorage may be full or unavailable; the draft is a nicety, not critical.
+  }
+}
+
+/** Restore the draft for the current conversation, if any. */
+function restoreDraft(): void {
+  if (!draftKey.value) {
+    input.value = '';
+    return;
+  }
+  try {
+    input.value = localStorage.getItem(draftKey.value) ?? '';
+  } catch {
+    input.value = '';
+  }
+}
+
+function clearDraft(): void {
+  input.value = '';
+  if (draftKey.value) {
+    try {
+      localStorage.removeItem(draftKey.value);
+    } catch {
+      // ignore
+    }
+  }
+}
 
 const visible = computed(() => chat.messages.filter((m) => m.role === 'user' || m.role === 'assistant'));
 
@@ -72,6 +111,7 @@ async function send(text?: string): Promise<void> {
   const value = (text ?? input.value).trim();
   if (!value || chat.isRunning) return;
   input.value = '';
+  clearDraft();
   await nextTick();
   autoGrow();
   pinned.value = true;
@@ -122,6 +162,15 @@ watch(
     pinned.value = true;
     scrollToBottom();
     focusInput();
+    restoreDraft();
+  }
+);
+
+watch(
+  () => input.value,
+  () => {
+    window.clearTimeout(draftTimer);
+    draftTimer = window.setTimeout(saveDraft, 300);
   }
 );
 
@@ -135,11 +184,13 @@ onMounted(() => {
   window.addEventListener('keydown', onGlobalKeydown);
   scrollToBottom();
   focusInput();
+  restoreDraft();
 });
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect();
   window.removeEventListener('keydown', onGlobalKeydown);
+  window.clearTimeout(draftTimer);
 });
 </script>
 

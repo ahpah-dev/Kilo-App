@@ -15,6 +15,7 @@ const gateway = useGatewayStore();
 const chat = useChatStore();
 
 const paletteOpen = ref(false);
+const shortcutsOpen = ref(false);
 
 const viewTitle = computed(() => {
   if (route.name === 'chat') return chat.activeConversation?.title ?? 'New chat';
@@ -99,6 +100,16 @@ const commands = computed<PaletteCommand[]>(() => {
       icon: 'settings',
       group: 'Go to',
       run: () => void router.push('/settings'),
+    },
+    {
+      id: 'keyboard-shortcuts',
+      label: 'Keyboard shortcuts',
+      hint: 'Ctrl /',
+      icon: 'key',
+      group: 'Go to',
+      run: () => {
+        shortcutsOpen.value = true;
+      },
     }
   );
 
@@ -126,6 +137,9 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (mod && e.key === ',') {
     e.preventDefault();
     void router.push('/settings');
+  } else if (e.key === '?' || (mod && e.key === '/')) {
+    e.preventDefault();
+    shortcutsOpen.value = true;
   }
 }
 
@@ -168,6 +182,38 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
       @close="paletteOpen = false"
       @open-conversation="openConversation"
     />
+
+    <transition name="fade">
+      <div v-if="shortcutsOpen" class="shortcuts-modal" @click.self="shortcutsOpen = false">
+        <div class="shortcuts-panel">
+          <div class="shortcuts-head">
+            <h2>Keyboard shortcuts</h2>
+            <button class="icon-btn" @click="shortcutsOpen = false">
+              <Icon name="x" :size="13" />
+            </button>
+          </div>
+          <div class="shortcuts-list">
+            <div class="shortcut-group">
+              <div class="shortcut-group-title">App</div>
+              <div class="shortcut-row"><span class="kbd">Ctrl K</span><span>Open command palette</span></div>
+              <div class="shortcut-row"><span class="kbd">Ctrl /</span><span>Show this help</span></div>
+              <div class="shortcut-row"><span class="kbd">Ctrl N</span><span>New chat</span></div>
+              <div class="shortcut-row"><span class="kbd">Ctrl ,</span><span>Open settings</span></div>
+              <div class="shortcut-row"><span class="kbd">Ctrl Shift F</span><span>Search all conversations</span></div>
+            </div>
+            <div class="shortcut-group">
+              <div class="shortcut-group-title">Chat</div>
+              <div class="shortcut-row"><span class="kbd">Enter</span><span>Send message</span></div>
+              <div class="shortcut-row"><span class="kbd">Shift Enter</span><span>Newline in composer</span></div>
+              <div class="shortcut-row"><span class="kbd">Esc</span><span>Stop a running agent</span></div>
+            </div>
+          </div>
+          <div class="shortcuts-foot">
+            <p>Shortcuts work app-wide unless noted. Chat-specific shortcuts apply in the composer.</p>
+          </div>
+        </div>
+      </div>
+    </transition>
   </div>
 </template>
 
@@ -221,5 +267,101 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* ===== Keyboard shortcuts help ===== */
+
+.shortcuts-modal {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--bg-primary) 60%, transparent);
+  backdrop-filter: blur(12px);
+  z-index: 100;
+}
+
+.shortcuts-panel {
+  width: min(520px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: var(--surface-card);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+}
+
+.shortcuts-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.shortcuts-head h2 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.shortcuts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px 20px;
+}
+
+.shortcut-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shortcut-group-title {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+}
+
+.shortcut-row {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.shortcut-row .kbd {
+  flex-shrink: 0;
+}
+
+.shortcut-row span:last-child {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-primary);
+}
+
+.shortcuts-foot {
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--hairline);
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .shortcuts-panel {
+    width: 90vw;
+    margin: 20px;
+  }
 }
 </style>

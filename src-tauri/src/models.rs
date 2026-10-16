@@ -370,6 +370,8 @@ pub struct AppConfig {
   pub api_key: Option<String>,
   pub default_model: Option<String>,
   pub workspace: Option<String>,
+  /// Kilo Gateway base URL. Defaults to `KILO_GATEWAY_BASE_URL` when absent.
+  pub gateway_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

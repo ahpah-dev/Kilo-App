@@ -131,6 +131,14 @@ class KiloApiService {
   readTextFile(path: string): Promise<string> {
     return invoke<string>('read_text_file', { path });
   }
+
+  getGatewayUrl(): Promise<string> {
+    return invoke<string>('get_gateway_url');
+  }
+
+  setGatewayUrl(url: string): Promise<void> {
+    return invoke<void>('set_gateway_url', { url });
+  }
 }
 
 export const kiloApi = new KiloApiService();

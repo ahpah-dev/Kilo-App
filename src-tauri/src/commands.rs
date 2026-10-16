@@ -27,6 +27,19 @@ pub async fn get_gateway_status(gateway: Gateway<'_>) -> Result<GatewayStatus, S
     gateway.get_gateway_status().await.map_err(|e| e.to_string())
 }
 
+/// Get the configured Kilo Gateway base URL.
+#[command]
+pub fn get_gateway_url(gateway: Gateway<'_>) -> String {
+    gateway.gateway_url()
+}
+
+/// Set the Kilo Gateway base URL. An empty string clears the override and
+/// restores the default.
+#[command]
+pub fn set_gateway_url(gateway: Gateway<'_>, url: String) {
+    gateway.set_gateway_url(url);
+}
+
 /// Non-streaming chat completion.
 #[command]
 pub async fn chat_completion(

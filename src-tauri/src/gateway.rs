@@ -76,6 +76,23 @@ impl KiloGatewayClient {
         }
     }
 
+    /// Effective gateway base URL: the configured override if set, otherwise the
+    /// field set at construction (which defaults to the real Kilo Gateway).
+    pub fn gateway_url(&self) -> String {
+        self.config
+            .get()
+            .gateway_url
+            .clone()
+            .unwrap_or_else(|| self.gateway_url().clone())
+    }
+
+    /// Persist a gateway base URL override. An empty string clears the override.
+    pub fn set_gateway_url(&self, url: String) {
+        let url = url.trim();
+        let url = if url.is_empty() { None } else { Some(url.to_string()) };
+        self.config.update(|c| c.gateway_url = url);
+    }
+
     pub fn set_api_key(&self, api_key: String) {
         self.config.update(|c| c.api_key = Some(api_key));
     }
@@ -128,7 +145,7 @@ impl KiloGatewayClient {
     async fn fetch_gateway_models(&self) -> Result<Vec<GatewayModel>> {
         let response = self
             .client
-            .get(format!("{}/models", self.gateway_url))
+            .get(format!("{}/models", self.gateway_url()))
             .headers(self.headers())
             .timeout(REQUEST_TIMEOUT)
             .send()
@@ -162,7 +179,7 @@ impl KiloGatewayClient {
 
         let providers_count = match self
             .client
-            .get(format!("{}/providers", self.gateway_url))
+            .get(format!("{}/providers", self.gateway_url()))
             .headers(self.headers())
             .timeout(REQUEST_TIMEOUT)
             .send()
@@ -182,7 +199,7 @@ impl KiloGatewayClient {
 
         Ok(GatewayStatus {
             status: "online".to_string(),
-            base_url: self.gateway_url.clone(),
+            base_url: self.gateway_url().clone(),
             connected_models: models.len() as u32,
             free_models,
             providers_count,
@@ -196,7 +213,7 @@ impl KiloGatewayClient {
         request.stream = Some(false);
         let response = self
             .client
-            .post(format!("{}/chat/completions", self.gateway_url))
+            .post(format!("{}/chat/completions", self.gateway_url()))
             .headers(self.headers())
             .json(&request)
             .send()
@@ -241,7 +258,7 @@ impl KiloGatewayClient {
         let response = loop {
             let send = self
                 .client
-                .post(format!("{}/chat/completions", self.gateway_url))
+                .post(format!("{}/chat/completions", self.gateway_url()))
                 .headers(self.headers())
                 .json(&request)
                 .send();
@@ -343,7 +360,7 @@ impl KiloGatewayClient {
 
         let response = self
             .client
-            .post(format!("{}/chat/completions", self.gateway_url))
+            .post(format!("{}/chat/completions", self.gateway_url()))
             .headers(Self::build_headers(Some(api_key)))
             .timeout(REQUEST_TIMEOUT)
             .json(&probe)

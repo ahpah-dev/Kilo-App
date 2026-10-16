@@ -4,7 +4,7 @@ import type { ToolCall, UiMessage } from '@/types';
 import { TOOL_META } from '@/services/tools';
 import { useChatStore } from '@/stores/chat';
 import { useGatewayStore } from '@/stores/gateway';
-import { highlightCode, languageForPath } from '@/utils/markdown';
+import { highlightCode, languageForPath, copyText } from '@/utils/markdown';
 import { lineDiff, diffStats } from '@/utils/diff';
 import { revealInExplorer } from '@/utils/files';
 import Icon, { type IconName } from '@/components/Icon.vue';
@@ -119,11 +119,35 @@ const defaultOpen = computed(() => {
 });
 
 const userOpen = ref<boolean | null>(null);
+const copied = ref(false);
 const open = computed(() => hasDetails.value && (awaiting.value || (userOpen.value ?? defaultOpen.value)));
 
 function toggle(): void {
   if (!hasDetails.value || awaiting.value) return;
   userOpen.value = !open.value;
+}
+
+/** The text worth copying from this tool card, by tool type. */
+const copyableText = computed(() => {
+  switch (name.value) {
+    case 'run_command':
+      return output.value;
+    case 'write_file':
+      return str('content');
+    case 'edit_file':
+      return str('new_string');
+    default:
+      return output.value;
+  }
+});
+
+async function copyOutput(): Promise<void> {
+  const text = copyableText.value;
+  if (!text.trim()) return;
+  if (await copyText(text)) {
+    copied.value = true;
+    window.setTimeout(() => (copied.value = false), 1400);
+  }
 }
 
 function approve(): void {
@@ -176,6 +200,14 @@ function reveal(event: MouseEvent): void {
         <Icon v-else-if="awaiting" name="shield" :size="13" />
         {{ statusLabel }}
       </span>
+      <button
+        v-if="copyableText.trim() && !awaiting"
+        class="icon-btn small"
+        :title="copied ? 'Copied' : 'Copy output'"
+        @click="copyOutput"
+      >
+        <Icon :name="copied ? 'check' : 'copy'" :size="13" />
+      </button>
       <Icon
         v-if="hasDetails && !awaiting"
         class="chevron"
